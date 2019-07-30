@@ -1,0 +1,18 @@
+variable,description
+sph ,Near-Surface Specific Humidity
+vpd ,Mean Vapor Pressure Deficit
+pr ,Precipitation
+rmin ,Minimum Near-Surface Relative Humidity
+rmax ,Maximum Near-Surface Relative Humidity
+srad ,Surface Downwelling Solar Radiation
+tmmn ,Minimum Near-Surface Air Temperature
+tmmx ,Maximum Near-Surface Air Temperature
+vs ,Wind speed at 10 m
+th ,Wind direction at 10 m
+pdsi ,Palmer Drought Severity Index
+pet ,Reference grass evaportranspiration
+etr ,Reference alfalfa evaportranspiration
+ERC ,Energy Release Component (model-G)
+BI ,Burning Index (model-G)
+FM100 ,100-hour dead fuel moisture
+FM1000 ,1000-hour dead fuel moisture

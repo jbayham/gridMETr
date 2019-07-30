@@ -1,0 +1,70 @@
+gridmetr_download <- 
+  function(variables,years,parallel.workers=1){
+    # Downloads data from gridMET
+    #
+    # Args: 
+    #   variables: (character) vector of variables names (see variables_reference)
+    #   years: (numeric) the years of data that you want to download
+    #   parallel.workers: (numeric) the number of workers that you want to use (default is 1)
+    #
+    # Returns:
+    #   No objects but it does create a data folder and saves netcdf files in it
+    #
+    require(dplyr)
+    require(purrr)
+    require(furrr)
+    require(future)
+    require(downloader)
+    require(lubridate)
+    #############################
+    # Error handling:
+    # Check variable
+    var_ref <- suppressMessages(read_csv("variables_reference.csv")) %>%
+      mutate(variable=str_to_lower(variable))
+    map(variables,function(v){
+      if (!(v %in% var_ref$variable)) {
+        stop(str_c("Variable ",v," not valid gridMET variable"))
+      }
+    })
+    
+    #Check years
+    yr.diff <- dplyr::setdiff(years,seq.int(1979,as.numeric(year(today()))))
+    if (length(yr.diff)>=1) {
+      stop(str_c("Years not available: ",str_c(yr.diff,collapse = ", ")))
+    }
+    
+    ############################
+    #Construct a list of files from the variables and years  
+    file.list <- expand.grid(variables,years,stringsAsFactors = F) %>% 
+      rename(var=Var1,year=Var2) %>%
+      arrange(var) %>%
+      mutate(file.name=str_c(var,"_",year,".nc")) 
+    
+    #Create destination folder(s) if they don't exist
+    map(str_c("data/",variables),
+        function(x){
+          if(!dir.exists(x)){
+            dir.create(x,recursive = T)}
+        }  )
+    
+    #Download all files in list
+    #plan(multiprocess(workers = parallel.workers))
+    future_map(1:dim(file.list)[1],
+               function(x){
+                #Check if the file exists in the target directory
+                target.file <- str_c("data/",file.list$var[x],"/",file.list$file.name[x])
+                if (file.exists(target.file)){
+                  message("Target file exists")
+                } else {
+                  #Download the file
+                  download(url=str_c("http://www.northwestknowledge.net/metdata/data/",file.list$file.name[x]),
+                           destfile = target.file,
+                           mode = 'wb')
+                }
+              }
+            )
+
+}
+  
+
+
