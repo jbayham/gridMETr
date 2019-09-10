@@ -9,8 +9,7 @@ Use the `gridmetr_download()` to download the data to a folder called data/_vari
 
 ```
 gridmetr_download(variables = c("pdsi","erc"),
-                  years = seq.int(2000,2002),
-                  parallel.workers = 6)
+                  years = seq.int(2000,2002))
 ```
 
 
@@ -18,9 +17,11 @@ gridmetr_download(variables = c("pdsi","erc"),
 
 ### ToDo
 
-- Determine why future (parallel) fails within the function
+- Determine why future (parallel) fails within the download function
 
 - Determine steps to convert to package
+
+- Provide some visualization utilities
 
 
 

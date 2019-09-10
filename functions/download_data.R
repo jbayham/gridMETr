@@ -10,16 +10,20 @@ gridmetr_download <-
     # Returns:
     #   No objects but it does create a data folder and saves netcdf files in it
     #
+    
+    #libraries
     require(dplyr)
-    require(purrr)
-    require(furrr)
-    require(future)
-    require(downloader)
     require(lubridate)
+    require(stringr)
+    require(readr)
+    require(purrr)
+    #require(furrr)
+    #require(future)
+    require(downloader)
     #############################
     # Error handling:
     # Check variable
-    var_ref <- suppressMessages(read_csv("variables_reference.csv")) %>%
+    var_ref <- suppressMessages(read_csv("_ref/variables_reference.csv")) %>%
       mutate(variable=str_to_lower(variable))
     map(variables,function(v){
       if (!(v %in% var_ref$variable)) {
@@ -48,8 +52,7 @@ gridmetr_download <-
         }  )
     
     #Download all files in list
-    #plan(multiprocess(workers = parallel.workers))
-    future_map(1:dim(file.list)[1],
+    map(1:dim(file.list)[1],
                function(x){
                 #Check if the file exists in the target directory
                 target.file <- str_c("data/",file.list$var[x],"/",file.list$file.name[x])
@@ -63,6 +66,10 @@ gridmetr_download <-
                 }
               }
             )
+    
+    #Would like to make this parallel in the future.  Currently, future doesn't
+    #work well when plan specified within a function 
+    #plan(multiprocess(workers = parallel.workers))
 
 }
   
