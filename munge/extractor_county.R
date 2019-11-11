@@ -1,31 +1,32 @@
 #This script provides an example for one way to extract data from netcdf files
 
-# libraries used 
-pacs <- c("tidyverse","furrr","lubridate","progress","foreach","doSNOW",
-          "USAboundaries","raster","rgdal","sf","gridExtra","ncdf4","foreign")
-lapply(pacs, require, character.only = TRUE)
 
-setwd("E:/Data/Weather/Gridmet")
 
-#load geographies
-load("geographies/geos.Rdata")
-################################
+##################################
+##################################
+#User-defined variables (use vector of string names or "." for wildcard):
 
-#Just to get lat and lon coordinates vs=windspeed
-var.name="pdsi"
+#Define folders (variables) to extract - 
+folder.names <- c(".")
+#Define set of years 
+filter.years <- c(".")
+##################################
+##################################
 
-#Get all file names from directory
-file.names <- dir(var.name)[!str_detect(dir(var.name),"desktop")]
+
+#All gridmet files are on the same grid of lat and lons so grabbing one
+file.names <- list.files("data",recursive = T,pattern = ".nc",full.names = T)
 
 #Open the connection to the netCDF file
-nc <- nc_open(str_c(var.name,"/",file.names[1]))
+nc <- nc_open(file.names[1])
 
 
 #Extract lat and lon vectors
 nc_lat <- ncvar_get(nc = nc, varid = "lat")
 nc_lon <- ncvar_get(nc = nc, varid = "lon")
 
-#Use the lat and lon vectors to create a grid represented as two vectors (note: lon must go first to match with netcdf data)
+#Use the lat and lon vectors to create a grid represented as two vectors (note:
+#lon must go first to match with netcdf data)
 nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat)
 
 
@@ -36,7 +37,8 @@ nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat)
 readin.proj=4269 #because it works with the lat and lons provided
 
 #Converting nc coordinates from vector form to simple feature (sf)
-g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>% st_set_crs(readin.proj)
+g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>% 
+  st_set_crs(readin.proj)
 
 
 #Attaching geographic data to netcdf grid -- ignore warning
@@ -47,38 +49,41 @@ bridge.county <- st_join(g.nc.coords,us_co,left=T) %>%
   st_set_geometry(NULL)
 
 
-##################################
-##################################
-#Define folders (variables) to extract
-folder.names <- c("pdsi")
-#Define set of years use: "." for wildcard
-filter.years <- c(".")
 
+
+#######################
+#For parallelization with future
+#plan(multiprocess(workers = 2))
+# future_map_dfr(...)
+##########################
+pb <- progress_bar$new(
+  format = " [:bar] :percent eta: :eta \n",
+  total = length(file.names), clear = FALSE, width= 60)
 #Begin loop over variables (folders)
-plan(multiprocess(workers = 7))
 gridmet.county <- 
-  map_dfr(folder.names,
+  map_dfr(str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|")),
       function(fn){
         message(str_c("Beginning ",fn,"..."))
         
         #Finding the names of all files in the directory
-        file.names <- dir(fn)[!str_detect(dir(var.name),"desktop")] %>% 
-                      str_subset(pattern=str_c(filter.years,collapse = "|"))
+        file.names <- dir(str_c("data/",fn)) %>%
+          str_subset(pattern=str_c(filter.years,collapse = "|"))
         
         #Setting static local folder name (probably unecessary)
-        folder.temp=fn
+        #folder.temp=fn
         
         #Extracting variable name for organization below
         #Open the connection to the netCDF file
-        nc <- nc_open(str_c(folder.temp,"/",file.names[1]))
+        nc <- nc_open(str_c("data/",fn,"/",file.names[1]))
         var.id=names(nc$var)
 
         #Begin loop over years (files)
         year.temp <- 
           map_dfr(file.names,
             function(f.names){
+              pb$tick()
               #Open the connection to the netCDF file
-              nc <- nc_open(str_c(folder.temp,"/",f.names))
+              nc <- nc_open(str_c("data/",fn,"/",f.names))
               
               #Get dates
               date.vector <- as_date(nc$dim$day$vals,origin="1900-01-01")
@@ -104,7 +109,7 @@ gridmet.county <-
               
               return(var.year)
               
-            },.progress = T) %>% 
+            }) %>% 
           mutate(variable=str_c(fn,"_",var.id))  #adding the variable name
         
         return(year.temp)
@@ -113,19 +118,19 @@ gridmet.county <-
 
 yr.range <- unique(year(gridmet.county$date))
 
-save(gridmet.county,file = str_c("_Rdata/pdsi_weekly_county_",min(yr.range),"-",max(yr.range),".Rdata"))
+save(gridmet.county,file = str_c("output/gridmet_county_daily_",min(yr.range),"-",max(yr.range),".Rdata"))
 
 
-for.dale <- gridmet.county %>%
-  mutate(quarter=quarter(date,with_year = T)) %>%
-  group_by(county,quarter) %>%
-  summarize(value=base::mean(value,na.rm=T)) 
-  
-write_csv(for.dale,
-          path = str_c("_Rdata/pdsi_quarter_county_",min(yr.range),"-",max(yr.range),".csv"))
-
-haven::write_dta(for.dale,
-                 path = str_c("_Rdata/pdsi_quarter_county_",min(yr.range),"-",max(yr.range),".dta"))
+# for.dale <- gridmet.county %>%
+#   mutate(quarter=quarter(date,with_year = T)) %>%
+#   group_by(county,quarter) %>%
+#   summarize(value=base::mean(value,na.rm=T)) 
+#   
+# write_csv(for.dale,
+#           path = str_c("_Rdata/pdsi_quarter_county_",min(yr.range),"-",max(yr.range),".csv"))
+# 
+# haven::write_dta(for.dale,
+#                  path = str_c("_Rdata/pdsi_quarter_county_",min(yr.range),"-",max(yr.range),".dta"))
   
 #######################################
 #Plot the data to see if fits intuition

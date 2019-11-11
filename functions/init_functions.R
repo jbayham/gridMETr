@@ -87,4 +87,22 @@ get_data <- function(folder_url){
 
 
 
-
+#This function builds out the folder structure
+folder.setup <- function(){
+  require(purrr)
+  folder.list <- c("data",
+                   "munge",
+                   "output")
+  
+  map(folder.list,
+      function(x){
+        if(!dir.exists(x)){
+          dir.create(x)
+          message(str_c("The ",x," folder has been created."))
+        } else {
+          message(str_c("The ",x," folder already exists."))
+        }
+      })
+  
+  return(NULL)
+}
