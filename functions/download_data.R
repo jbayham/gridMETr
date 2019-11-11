@@ -1,11 +1,10 @@
 gridmetr_download <- 
-  function(variables,years,parallel.workers=1){
+  function(variables,years){
     # Downloads data from gridMET
     #
     # Args: 
     #   variables: (character) vector of variables names (see variables_reference)
     #   years: (numeric) the years of data that you want to download
-    #   parallel.workers: (numeric) the number of workers that you want to use (default is 1)
     #
     # Returns:
     #   No objects but it does create a data folder and saves netcdf files in it
