@@ -23,16 +23,17 @@ load("output/gridmet_county_daily_2003-2018.Rdata")
 
 ##############################
 #Calculating monthly means
-gridmet.monthly.cbsa <- gridmet.out.cbsa %>%
+gridmet.year.cbsa <- gridmet.out.cbsa %>%
   mutate(month = month(date),
          year = year(date)) %>%
-  group_by(variable,cbsa,year,month) %>%
+  filter(between(month,5,10)) %>%
+  group_by(variable,cbsa,year) %>%
   summarize(min=min(value, na.rm = T),
             mean=mean(value, na.rm = T),
             median=median(value, na.rm = T),
             max=max(value, na.rm = T)) %>%
   ungroup() %>%
-  gather(-variable,-cbsa,-month,-year,
+  gather(-variable,-cbsa,-year,
          key="measure",value = "value") %>%
   mutate(variable=str_c(variable,"_",measure)) %>%
   select(-measure) %>%
@@ -40,25 +41,24 @@ gridmet.monthly.cbsa <- gridmet.out.cbsa %>%
          value = value)
 
 
-gridmet.monthly.county <- gridmet.out.county %>%
+gridmet.year.county <- gridmet.out.county %>%
   mutate(month = month(date),
          year = year(date)) %>%
-  group_by(variable,county,year,month) %>%
+  filter(between(month,5,10)) %>%
+  group_by(variable,county,year) %>%
   summarize(min=min(value, na.rm = T),
             mean=mean(value, na.rm = T),
             median=median(value, na.rm = T),
             max=max(value, na.rm = T)) %>%
   ungroup() %>%
-  gather(-variable,-county,-month,-year,
+  gather(-variable,-county,-year,
          key="measure",value = "value") %>%
   mutate(variable=str_c(variable,"_",measure)) %>%
   select(-measure) %>%
   spread(key = variable,
          value = value)
 
-save(gridmet.monthly.cbsa,gridmet.monthly.county,
-     file = "output/monthly_weather.Rdata")
-
-
+save(gridmet.year.cbsa,gridmet.year.county,
+     file = "output/year_weather.Rdata")
 
 
