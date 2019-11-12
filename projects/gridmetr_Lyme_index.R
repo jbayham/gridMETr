@@ -14,7 +14,21 @@ source("project_init.R")
 # gridmetr_download(variables = g.vars,
 #                   years = g.years)  
 # 
+measurements::conv_unit(2.53,"m_per_sec","mph")
 
+gridmet.out.cbsa %>%
+  mutate(value=ifelse(str_detect(variable,"vs"),   #Windspeed m/s to mph
+                      measurements::conv_unit(value,"m_per_sec","mph"),
+                      value),
+         value=ifelse(str_detect(variable,"precipitation"),   #precip mm to inch
+                      measurements::conv_unit(value,"mm","inch"),
+                      value),
+         value=ifelse(str_detect(variable,"tmm"),             #Temp Kelvin to C
+                      measurements::conv_unit(value,"K","C"),
+                      value)
+         ) %>%
+  filter(variable!="th_wind_from_direction")
+unique(gridmet.out.cbsa$variable)
 #Loading output data
 load("output/gridmet_cbsa_daily_2003-2018.Rdata")
 
@@ -24,6 +38,17 @@ load("output/gridmet_county_daily_2003-2018.Rdata")
 ##############################
 #Calculating monthly means
 gridmet.year.cbsa <- gridmet.out.cbsa %>%
+  mutate(value=ifelse(str_detect(variable,"vs"),   #Windspeed m/s to mph
+                      measurements::conv_unit(value,"m_per_sec","mph"),
+                      value),
+         value=ifelse(str_detect(variable,"precipitation"),   #precip mm to inch
+                      measurements::conv_unit(value,"mm","inch"),
+                      value),
+         value=ifelse(str_detect(variable,"tmm"),             #Temp Kelvin to C
+                      measurements::conv_unit(value,"K","C"),
+                      value)
+  ) %>%
+  filter(variable!="th_wind_from_direction") %>%
   mutate(month = month(date),
          year = year(date)) %>%
   filter(between(month,5,10)) %>%
@@ -42,6 +67,17 @@ gridmet.year.cbsa <- gridmet.out.cbsa %>%
 
 
 gridmet.year.county <- gridmet.out.county %>%
+  mutate(value=ifelse(str_detect(variable,"vs"),   #Windspeed m/s to mph
+                      measurements::conv_unit(value,"m_per_sec","mph"),
+                      value),
+         value=ifelse(str_detect(variable,"precipitation"),   #precip mm to inch
+                      measurements::conv_unit(value,"mm","inch"),
+                      value),
+         value=ifelse(str_detect(variable,"tmm"),             #Temp Kelvin to C
+                      measurements::conv_unit(value,"K","C"),
+                      value)
+  ) %>%
+  filter(variable!="th_wind_from_direction") %>%
   mutate(month = month(date),
          year = year(date)) %>%
   filter(between(month,5,10)) %>%
@@ -58,7 +94,9 @@ gridmet.year.county <- gridmet.out.county %>%
   spread(key = variable,
          value = value)
 
-save(gridmet.year.cbsa,gridmet.year.county,
-     file = "output/year_weather.Rdata")
+gridmet.year <- bind_rows(gridmet.year.cbsa %>% mutate(ident=as.numeric(cbsa)),
+                          gridmet.year.county %>% mutate(ident=as.numeric(county)))
+
+save(gridmet.year,file = "output/year_weather.Rdata")
 
 
