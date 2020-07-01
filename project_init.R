@@ -11,9 +11,12 @@ init.pacs(c("tidyverse",      #shortcut to many useful packages (eg, dplyr, ggpl
             "lubridate",      #working with dates
             "sf",             #for GIS
             "USAboundaries",  #easily access US maps in sf
-            #"googledrive",    #for accessing googledrive
+            "googledrive",    #for accessing googledrive
             #"furrr","foreach","doSNOW",
+            "data.table",     #fast operations
+            "measurements",   #unit conversion
             "progress",       #for progress bars
+            "tigris",         #for accessing census layers
             #"raster",         #for working with raster data
             "rgdal",          #GIS processing
             "ncdf4",          #accessing netcdf data
@@ -24,6 +27,9 @@ init.pacs(c("tidyverse",      #shortcut to many useful packages (eg, dplyr, ggpl
 #Setting package::function priority with conflicted package
 conflict_prefer("filter", "dplyr")
 conflict_prefer("between", "dplyr")
+conflict_prefer("year", "lubridate")
+conflict_prefer("month", "lubridate")
+
 #########################
 #Loading project helper functions (all scripts within folder)
 run.script("functions")

@@ -10,10 +10,10 @@
 ##################################
 #User-defined variables (use vector of string names or "." for wildcard):
 
-#Define folders (variables) to extract - 
-folder.names <- c(".")
+#Define folders (variables) to extract -
+folder.names <- c("pr","rmin","rmax","tmmn","tmmx","vs","th","srad")
 #Define set of years 
-filter.years <- c(".")
+filter.years <- seq.int(2006,2018)
 ##################################
 ##################################
 
@@ -58,9 +58,7 @@ bridge.cbsa <- st_join(g.nc.coords,us_cbsa,left=T) %>%
   mutate(lon=as.vector(st_coordinates(.)[,1]),
          lat=as.vector(st_coordinates(.)[,2])) %>%
   st_set_geometry(NULL) %>%
-  filter(!is.na(cbsa))
-
-#test <- distinct(bridge.cbsa,lat,lon,.keep_all = T)
+  distinct(.,lat,lon,.keep_all = T)
 
 
 #######################
@@ -105,29 +103,29 @@ gridmet.out <-
               nc.data <- ncvar_get(nc = nc, varid = var.id)[,,]
               
               nc.data <- array(nc.data,dim=c(prod(dim(nc.data)[1:2]),dim(nc.data)[3])) %>%
-                as_tibble(.name_repair = "universal") %>%
-                rename_all(~str_c(date.vector))
+                as_tibble(.name_repair = ~str_c(date.vector))
           
-              #Organize nc.data into dataframe 
-              nc.df <- bind_cols(nc.coords,nc.data) 
-              #   gather(-one_of("lon","lat"),key="date",value="value")
               
-              var.county <- bind_cols(bridge.county,nc.data) %>%
-                dplyr::filter(!is.na(county)) %>%
-                gather(-one_of("lon","lat","county"),key="date",value="value") %>%
-                group_by(county,date) %>%
-                summarize(value=base::mean(value,na.rm=T)) %>%
-                ungroup() %>%
-                mutate(date=ymd(date))
+              #Calculate mean of cells in county boundary
+              var.county <- data.table(bind_cols(bridge.county, nc.data)) %>%
+                .[!is.na(county), ] %>%
+                melt(.,
+                     id.vars = c("county", "lon", "lat"),
+                     variable.name = "date") %>%
+                .[, .(value = mean(value, na.rm = T)), by = .(county, date)] %>%
+                .[order(county, date), .(county, date = ymd(date), value)] %>%
+                as_tibble()
+            
               
-              var.cbsa <- inner_join(bridge.cbsa,
-                                     nc.df,
-                                     by=c("lat","lon")) %>%
-                gather(-one_of("lon","lat","cbsa"),key="date",value="value") %>%
-                group_by(cbsa,date) %>%
-                summarize(value=base::mean(value,na.rm=T)) %>%
-                ungroup() %>%
-                mutate(date=ymd(date))
+              #Calculate mean of cells in cbsa boundary
+              var.cbsa <- data.table(bind_cols(bridge.cbsa, nc.data)) %>%
+                .[!is.na(cbsa), ] %>%
+                melt(.,
+                     id.vars = c("cbsa", "lon", "lat"),
+                     variable.name = "date") %>%
+                .[, .(value = mean(value, na.rm = T)), by = .(cbsa, date)] %>%
+                .[order(cbsa, date), .(cbsa, date = ymd(date), value)] %>%
+                as_tibble()
               
               return(list(county=var.county,
                           cbsa=var.cbsa))

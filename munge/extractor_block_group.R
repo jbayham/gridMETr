@@ -3,6 +3,7 @@
 setwd("G:/Weather/gridMETr/")
 source("project_init.R")
 
+
 ##################################
 ##################################
 #User-defined variables (use vector of string names or "." for wildcard):
@@ -19,7 +20,7 @@ filter.years <- c(2020) #seq.int(2006,2018)
 # 
 # gridmetr_download(folder.names,filter.years)
 ##################################
-
+load("_ref/geographies/block_groups.Rdata")
 
 #All gridmet files are on the same grid of lat and lons so grabbing one
 file.names <- list.files("data",recursive = T,pattern = ".nc",full.names = T) %>%
@@ -50,14 +51,14 @@ g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>%
   st_set_crs(readin.proj)
 
 
-#Attaching geographic data to netcdf grid -- ignore warning
-bridge.county <- st_join(g.nc.coords,us_co,left=T) %>% 
-  dplyr::select(county=geoid) %>%
-  mutate(lon=as.vector(st_coordinates(.)[,1]),
-         lat=as.vector(st_coordinates(.)[,2])) %>%
+#If geos are too small, associate with nearest point
+bg.pts <- st_centroid(us_bg) 
+
+bridge.geo <- st_join(bg.pts[us_st,],
+                      g.nc.coords %>% mutate(id=row_number()),
+                      join = st_nearest_feature,
+                      left=T) %>% 
   st_set_geometry(NULL)
-
-
 
 
 #######################
@@ -69,7 +70,7 @@ pb <- progress_bar$new(
   format = " [:bar] :percent eta: :eta \n",
   total = length(file.names), clear = FALSE, width= 60)
 #Begin loop over variables (folders)
-gridmet.county <- 
+gridmet.cbg <- 
   map_dfr(str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|")),
       function(fn){
         message(str_c("Beginning ",fn,"..."))
@@ -90,7 +91,7 @@ gridmet.county <-
         year.temp <- 
           map_dfr(file.names,
             function(f.names){
-              pb$tick()
+              #pb$tick()
               #Open the connection to the netCDF file
               nc <- nc_open(str_c("data/",fn,"/",f.names))
               
@@ -101,20 +102,18 @@ gridmet.county <-
               nc.data <- ncvar_get(nc = nc, varid = var.id)[,,]
               
               nc.data <- array(nc.data,dim=c(prod(dim(nc.data)[1:2]),dim(nc.data)[3])) %>%
-                as_tibble(.name_repair = "universal") %>%
-                rename_all(~str_c(date.vector))
+                as_tibble(.name_repair = ~str_c(date.vector)) 
           
               #Organize nc.data into dataframe 
-              nc.df <- bind_cols(nc.coords,nc.data) %>%
-                gather(-one_of("lon","lat"),key="date",value="value")
+              nc.df <- nc.data %>%
+                mutate(id=row_number()) %>%
+                pivot_longer(-id,names_to = "date",values_to = "value") %>%
+                drop_na()
+                
               
-              var.year <- bind_cols(bridge.county,nc.data) %>%
-                dplyr::filter(!is.na(county)) %>%
-                gather(-one_of("lon","lat","county"),key="date",value="value") %>%
-                group_by(county,date) %>%
-                summarize(value=base::mean(value,na.rm=T)) %>%
-                ungroup() %>%
-                mutate(date=ymd(date))
+              var.year <- inner_join(bridge.geo,nc.df) %>%
+                mutate(date=ymd(date)) %>%
+                select(-id)
               
               nc_close(nc)
               return(var.year)
@@ -126,13 +125,13 @@ gridmet.county <-
     }) %>%
   dplyr::filter(!is.na(value))
 
-date.range <- unique(gridmet.county$date)
+date.range <- unique(gridmet.cbg$date)
 
-#save(gridmet.county,file = str_c("output/gridmet_county_daily_",min(date.range),"_",max(date.range),".Rdata"))
+#save(gridmet.cbg,file = str_c("output/gridmet_block_group_daily_",min(date.range),"-",max(date.range),".Rdata"))
 
 
-gm.wide <- gridmet.county %>%
-  pivot_wider(id_cols = c(county,date),
+bg_weather <- gridmet.cbg %>%
+  pivot_wider(id_cols = c(geoid,date),
               names_from = "variable",
               values_from = "value") %>%
   mutate_at(vars(tmmn_air_temperature,tmmx_air_temperature),~conv_unit(.,"K","F")) %>%
@@ -146,16 +145,14 @@ gm.wide <- gridmet.county %>%
          wind_speed=vs_wind_speed)
 
 
-fwrite(gm.wide,"output/weather_county_2020-01-01_yesterday.csv.gz")
+
+fwrite(bg_weather,"output/weather_cbg_2020-01-01_yesterday.csv.gz")
 
 
 
-file.copy(from = "output/weather_county_2020-01-01_yesterday.csv.gz",
-          to = "L:/My Drive/data_not_synced/gridmet_share/weather_county_2020-01-01_yesterday.csv.gz",
+file.copy(from = "output/weather_cbg_2020-01-01_yesterday.csv.gz",
+          to = "L:/My Drive/data_not_synced/gridmet_share/weather_cbg_2020-01-01_yesterday.csv.gz",
           overwrite = T)
 
-
-# drive_update(file = as_id("https://drive.google.com/open?id=1u7MUokF-1ipmFJNEl4xyRVy5ubcQ2OWh"),
-#              media = str_c("output/weather_county_",min(date.range),"-",max(date.range),".zip"))
-
-
+# drive_update(file = as_id("https://drive.google.com/open?id=1BQYXJbEPLWzFvsQcNIAc7nIa5ps-Lx3V"),
+#              media = str_c("output/weather_cbg_",min(date.range),"-",max(date.range),".zip"))

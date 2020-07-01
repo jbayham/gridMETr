@@ -37,3 +37,8 @@ vignettes/*.pdf
 # Shiny token, see https://shiny.rstudio.com/articles/shinyapps.html
 rsconnect/
 .Rproj.user
+
+
+presentation/*
+_ref/geographies/bg/*
+_ref/geographies/block*
