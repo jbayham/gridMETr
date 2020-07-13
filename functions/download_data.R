@@ -67,9 +67,7 @@ gridmetr_download <-
               }
             )
     
-    #Would like to make this parallel in the future.  Currently, future doesn't
-    #work well when plan specified within a function 
-    #plan(multiprocess(workers = parallel.workers))
+
 
 }
   
