@@ -16,9 +16,11 @@ init.pacs(c("tidyverse",      #shortcut to many useful packages (eg, dplyr, ggpl
             "data.table",     #fast operations
             "measurements",   #unit conversion
             "progress",       #for progress bars
+            "vroom",          #fast reading and writing
             "tigris",         #for accessing census layers
             #"raster",         #for working with raster data
             "rgdal",          #GIS processing
+            "tools",
             "ncdf4",          #accessing netcdf data
             "haven"           #other stat datatypes
 ))

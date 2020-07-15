@@ -12,7 +12,7 @@ th ,wind_direction,Wind direction at 10 m
 pdsi ,palmer_drought_severity_index,Palmer Drought Severity Index
 pet ,grass_evaportranspiration,Reference grass evaportranspiration
 etr ,alfalfa_evaportranspiration,Reference alfalfa evaportranspiration
-ERC ,energy_release_component,Energy Release Component (model-G)
-BI ,burning_index,Burning Index (model-G)
-FM100 ,dead_fuel_moisture_100hr,100-hour dead fuel moisture
-FM1000 ,dead_fuel_moisture_1000hr,1000-hour dead fuel moisture
+erc ,energy_release_component,Energy Release Component (model-G)
+bi ,burning_index,Burning Index (model-G)
+fm100 ,dead_fuel_moisture_100hr,100-hour dead fuel moisture
+fm1000 ,dead_fuel_moisture_1000hr,1000-hour dead fuel moisture

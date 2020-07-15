@@ -1,6 +1,6 @@
 #This script provides an example for one way to extract data from netcdf files
 
-setwd("G:/Weather/gridMETr/")
+#setwd("G:/Weather/gridMETr/")
 source("project_init.R")
 
 ##################################
@@ -92,14 +92,21 @@ map(str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|")),
       nc <- nc_open(str_c("data/",fn,"/",file.names[1]))
       
       #Set variable name
-      #var.id=names(nc$var)
-      var.id <- all_names[]
+      var.id=names(nc$var)
+      var.new.name <- all_names[variable==fn,var_name]
+      
+      nc_close(nc)
 
       #Begin loop over years (files)
-      year.temp <- 
-        map_dfr(file.names,
+      #year.temp <- 
+        map(file.names,
           function(f.names){
             pb$tick()
+            
+            if(file.exists(str_c("outputs/county/",file_path_sans_ext(f.names),".csv.gz"))){
+              return()
+            } else {
+              
             #Open the connection to the netCDF file
             nc <- nc_open(str_c("data/",fn,"/",f.names))
             
@@ -109,62 +116,31 @@ map(str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|")),
             #Read in year of observations and collapse to matrix with lat/lon on rows and dates as columns
             nc.data <- ncvar_get(nc = nc, varid = var.id)[,,]
             
-            nc.data <- array(nc.data,dim=c(prod(dim(nc.data)[1:2]),dim(nc.data)[3])) %>%
-              as_tibble(.name_repair = "universal") %>%
-              rename_all(~str_c(date.vector))
-        
-            #Organize nc.data into dataframe 
-            nc.df <- bind_cols(nc.coords,nc.data) %>%
-              gather(-one_of("lon","lat"),key="date",value="value")
+            nc.data.array <- array(nc.data,dim=c(prod(dim(nc.data)[1:2]),dim(nc.data)[3])) %>%
+              as.data.table()
             
-            var.year <- bind_cols(bridge.county,nc.data) %>%
-              dplyr::filter(!is.na(county)) %>%
-              gather(-one_of("lon","lat","county"),key="date",value="value") %>%
-              group_by(county,date) %>%
-              summarize(value=base::mean(value,na.rm=T)) %>%
-              ungroup() %>%
-              mutate(date=ymd(date))
+            #nc.data2 <- as.data.table(nc.data)
+            setnames(nc.data.array,as.character(date.vector))
+            
+            nc.df <- as.data.table(cbind(bridge.county,nc.data.array)) %>%
+              melt(.,
+                   id.vars = c("lon","lat","county"),
+                   variable.name = "date",
+                   value.name = "value",
+                   variable.factor = FALSE) 
+            
+            nc.final <- nc.df[!is.na(county),
+                              .(value=mean(value)),
+                              keyby=.(county,date)] %>%
+              .[,"date":=as_date(date)]
+            
+            setnames(nc.final,old = "value",new = var.new.name)
+              
+            fwrite(nc.final,file = str_c("outputs/county/",file_path_sans_ext(f.names),".csv.gz"))
             
             nc_close(nc)
-            return(var.year)
-            
-          }) %>% 
-        mutate(variable=str_c(fn,"_",var.id))  #adding the variable name
+            } #ends if statement
+          }) 
       
-      return(year.temp)
-  }) %>%
-dplyr::filter(!is.na(value))
-
-date.range <- unique(gridmet.county$date)
-
-#save(gridmet.county,file = str_c("output/gridmet_county_daily_",min(date.range),"_",max(date.range),".Rdata"))
-
-
-gm.wide <- gridmet.county %>%
-  pivot_wider(id_cols = c(county,date),
-              names_from = "variable",
-              values_from = "value") %>%
-  mutate_at(vars(tmmn_air_temperature,tmmx_air_temperature),~conv_unit(.,"K","F")) %>%
-  mutate(vs_wind_speed = conv_unit(vs_wind_speed,"m_per_sec","mph")) %>%
-  rename(precip=pr_precipitation_amount,
-         rmax=rmax_relative_humidity,
-         rmin=rmin_relative_humidity,
-         tmin=tmmn_air_temperature,
-         tmax=tmmx_air_temperature,
-         srad=srad_surface_downwelling_shortwave_flux_in_air,
-         wind_speed=vs_wind_speed)
-
-
-fwrite(gm.wide,"output/weather_county_2020-01-01_yesterday.csv.gz")
-
-
-
-file.copy(from = "output/weather_county_2020-01-01_yesterday.csv.gz",
-          to = "L:/My Drive/data_not_synced/gridmet_share/weather_county_2020-01-01_yesterday.csv.gz",
-          overwrite = T)
-
-
-# drive_update(file = as_id("https://drive.google.com/open?id=1u7MUokF-1ipmFJNEl4xyRVy5ubcQ2OWh"),
-#              media = str_c("output/weather_county_",min(date.range),"-",max(date.range),".zip"))
-
+  }) 
 
