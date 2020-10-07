@@ -46,11 +46,11 @@ g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>%
 
 
 #Attaching geographic data to netcdf grid -- ignore warning
-bridge.county <- st_join(g.nc.coords,us_co,left=T) %>% 
-  dplyr::select(county=geoid) %>%
-  mutate(lon=as.vector(st_coordinates(.)[,1]),
-         lat=as.vector(st_coordinates(.)[,2])) %>%
-  st_set_geometry(NULL)
+# bridge.county <- st_join(g.nc.coords,us_co,left=T) %>% 
+#   dplyr::select(county=geoid) %>%
+#   mutate(lon=as.vector(st_coordinates(.)[,1]),
+#          lat=as.vector(st_coordinates(.)[,2])) %>%
+#   st_set_geometry(NULL)
 
 #Attaching geographic data to netcdf grid -- ignore warning
 bridge.cbsa <- st_join(g.nc.coords,us_cbsa,left=T) %>% 
@@ -61,7 +61,14 @@ bridge.cbsa <- st_join(g.nc.coords,us_cbsa,left=T) %>%
   filter(!is.na(cbsa))
 
 #test <- distinct(bridge.cbsa,lat,lon,.keep_all = T)
-
+fn <- str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|"))[1]
+act1 <- 1:3
+act2 <- 4:6
+act3 <- 7:9
+act4 <- 10:12
+act5 <- 13:15
+act6 <- 16:18
+f.names <- file.names[1]
 
 #######################
 #For parallelization with future
@@ -92,9 +99,9 @@ gridmet.out <-
 
         #Begin loop over years (files)
         year.temp <- 
-          map(file.names,
+          map(file.names[act1],
             function(f.names){
-              pb$tick()
+              # pb$tick()
               #Open the connection to the netCDF file
               nc <- nc_open(str_c("data/",fn,"/",f.names))
               
@@ -112,27 +119,29 @@ gridmet.out <-
               nc.df <- bind_cols(nc.coords,nc.data) 
               #   gather(-one_of("lon","lat"),key="date",value="value")
               
-              var.county <- bind_cols(bridge.county,nc.data) %>%
-                dplyr::filter(!is.na(county)) %>%
-                gather(-one_of("lon","lat","county"),key="date",value="value") %>%
-                mutate(date=ymd(date))
+              # var.county <- bind_cols(bridge.cbsa,nc.data) %>%
+              #   dplyr::filter(!is.na(county)) %>%
+              #   gather(-one_of("lon","lat","county"),key="date",value="value") %>%
+              #   mutate(date=ymd(date))
               
               var.cbsa <- inner_join(bridge.cbsa,
                                      nc.df,
                                      by=c("lat","lon")) %>%
-                gather(-one_of("lon","lat","cbsa"),key="date",value="value") %>%
-                group_by(cbsa,date) %>%
-                summarize(value=base::mean(value,na.rm=T)) %>%
-                ungroup() %>%
+                pivot_longer(-c(lon,lat,cbsa),
+                             names_to = "date",
+                             values_to = "value") %>% 
+                # gather(-one_of("lon","lat","cbsa"),key="date",value="value") %>%
+                # group_by(cbsa,date) %>%
+                # summarize(value=base::mean(value,na.rm=T)) %>%
+                # ungroup() %>%
                 mutate(date=ymd(date))
               
-              return(list(county=var.county,
-                          cbsa=var.cbsa))
+              return(list(cbsa=var.cbsa))
               
             }) 
         
-        county.out <- map(year.temp,"county") %>%
-          map_dfr(~mutate(.,variable=str_c(fn,"_",var.id)))
+        # county.out <- map(year.temp,"county") %>%
+        #   map_dfr(~mutate(.,variable=str_c(fn,"_",var.id)))
         
         cbsa.out <- map(year.temp,"cbsa") %>%
           map_dfr(~mutate(.,variable=str_c(fn,"_",var.id)))
@@ -141,7 +150,7 @@ gridmet.out <-
                     cbsa=cbsa.out))    
         }) 
 
-gridmet.out.county <- map_dfr(gridmet.out,"county")
+# gridmet.out.county <- map_dfr(gridmet.out,"county")
 
 gridmet.out.cbsa <- map_dfr(gridmet.out,"cbsa")
 
