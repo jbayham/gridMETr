@@ -62,17 +62,19 @@ bridge.cbsa <- st_join(g.nc.coords,us_cbsa,left=T) %>%
 
 #test <- distinct(bridge.cbsa,lat,lon,.keep_all = T)
 fn <- str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|"))[1]
-act1 <- 1:3
-act2 <- 4:6
-act3 <- 7:9
-act4 <- 10:12
-act5 <- 13:15
-act6 <- 16:18
 f.names <- file.names[1]
+# act1 <- 1:3
+# act2 <- 4:6
+# act3 <- 7:9
+# act4 <- 10:12
+# act5 <- 13:15
+# act6 <- 16:18
+
 
 #######################
 #For parallelization with future
-#plan(multiprocess(workers = 2))
+library(furrr)
+# plan(multiprocess)
 # future_map_dfr(...)
 ##########################
 pb <- progress_bar$new(
@@ -81,7 +83,7 @@ pb <- progress_bar$new(
 
 #Begin loop over variables (folders)
 gridmet.out <- 
-  map(str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|")),
+  map(str_subset(dir("data"),pattern=str_c(folder.names[6],collapse = "|")),
       function(fn){
         message(str_c("Beginning ",fn,"..."))
         
@@ -94,12 +96,13 @@ gridmet.out <-
         
         #Extracting variable name for organization below
         #Open the connection to the netCDF file
-        nc <- nc_open(str_c("data/",fn,"/",file.names[1]))
+        nc <- nc_open(str_c("data/",fn,"/",file.names))
         var.id=names(nc$var)
 
         #Begin loop over years (files)
+        
         year.temp <- 
-          map(file.names[act1],
+          map(file.names,
             function(f.names){
               # pb$tick()
               #Open the connection to the netCDF file
@@ -130,29 +133,31 @@ gridmet.out <-
                 pivot_longer(-c(lon,lat,cbsa),
                              names_to = "date",
                              values_to = "value") %>% 
-                # gather(-one_of("lon","lat","cbsa"),key="date",value="value") %>%
-                # group_by(cbsa,date) %>%
-                # summarize(value=base::mean(value,na.rm=T)) %>%
-                # ungroup() %>%
+                group_by(cbsa,date) %>%
+                summarize(value=base::mean(value,na.rm=T)) %>%
+                ungroup() %>%
                 mutate(date=ymd(date))
               
-              return(list(cbsa=var.cbsa))
+              # write_rds(var.cbsa,paste0("data/cbsa_filtered/",str_remove(f.names,"\\.nc"),".rds"))
               
             }) 
         
+        write_rds(year.temp,paste0("data/cbsa_filtered/summed_",str_remove(file.names,"_\\d+\\.nc")[1],".rds"))
         # county.out <- map(year.temp,"county") %>%
         #   map_dfr(~mutate(.,variable=str_c(fn,"_",var.id)))
         
-        cbsa.out <- map(year.temp,"cbsa") %>%
-          map_dfr(~mutate(.,variable=str_c(fn,"_",var.id)))
-        
-        return(list(county=county.out,
-                    cbsa=cbsa.out))    
+        # cbsa.out <- map(year.temp,"cbsa") %>%
+        #   map_dfr(~mutate(.,variable=str_c(fn,"_",var.id)))
+        # 
+        # return(list(county=county.out,
+        #             cbsa=cbsa.out))    
         }) 
 
 # gridmet.out.county <- map_dfr(gridmet.out,"county")
 
-gridmet.out.cbsa <- map_dfr(gridmet.out,"cbsa")
+test <- reduce(year.temp,bind_rows)
+
+gridmet.out.cbsa <- map_dfr(year.temp,"cbsa")
 
 yr.range <- unique(year(gridmet.out.county$date))
 

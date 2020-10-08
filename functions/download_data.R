@@ -1,3 +1,8 @@
+variables <- c("vs","tmmx","tmmn","rmin","rmax","pr")
+years <- 2000:2018
+
+gridmetr_download(variables = "vs",years = 2003)
+
 gridmetr_download <- 
   function(variables,years){
     # Downloads data from gridMET
