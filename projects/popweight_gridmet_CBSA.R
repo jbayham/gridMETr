@@ -12,6 +12,17 @@ file.names <- list.files("data",recursive = T,pattern = ".nc",full.names = T)
 #Open the connection to the netCDF file
 nc <- nc_open(file.names[1])
 
+raster<-brick(file.names[1])
+slice <- raster[[1]]
+
+#back to sf, now polygon
+grid.blankr <- slice %>%
+  rasterToPolygons() %>%
+  st_as_sf() 
+
+
+
+
 #Extract lat and lon vectors
 nc_lat <- ncvar_get(nc = nc, varid = "lat")
 nc_lon <- ncvar_get(nc = nc, varid = "lon")
@@ -64,8 +75,9 @@ map2 <- bridge.cbsa %>%
 library(mapview)
 mapview(map) + mapview(map2)
 
-
-
+map <- grid.blankr %>% 
+  slice(10000:15000)
+mapview(map)
 
 
 ls <- read
