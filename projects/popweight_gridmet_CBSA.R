@@ -1,19 +1,49 @@
 library(raster)
 
 folder.names <- c("pr","rmin","rmax","tmmn","tmmx","vs")
-#Define set of years 
 filter.years <- seq(2000,2018)
-##################################
-##################################
 
 #All gridmet files are on the same grid of lat and lons so grabbing one
 file.names <- list.files("data",recursive = T,pattern = ".nc",full.names = T)
-
 #Open the connection to the netCDF file
 nc <- nc_open(file.names[1])
 
-raster<-brick(file.names[1])
+#####
+# option to try to pull as a raster directly
+#####
+raster <- brick(file.names[1])
 slice <- raster[[1]]
+
+crs(slice) <- crs(uslandscan)
+
+
+
+library(mapview)
+mapview(slice)
+
+landscan <- raster("/RSTOR/landscan/LandScan Global 2018/lspop2018/w001001.adf")
+uslandscan <- crop(landscan,extent(us_cbsa[1,]))
+testslice <- crop(slice,extent(us_cbsa[1,]))
+slicecoords <- xyFromCell(testslice, 1:ncell(testslice))
+
+testsample <- resample(uslandscan, testslice, method = "bilinear")
+coords <- xyFromCell(testsample, 1:ncell(testsample))
+
+# coords, values(testsample)
+# coords -> sf cbsa intersection
+
+t <- read_rds("data/cbsa_filtered/daily/pr_2000.rds")
+
+
+hijude <- raster::mosaic(slice,uslandscan)
+
+mapview(testsample)
+mapview(uslandscan)
+
+
+
+
+plot(slice)
 
 #back to sf, now polygon
 grid.blankr <- slice %>%
@@ -21,19 +51,15 @@ grid.blankr <- slice %>%
   st_as_sf() 
 
 
-
-
+#####
+# option to pull as flat first
+#####
 #Extract lat and lon vectors
 nc_lat <- ncvar_get(nc = nc, varid = "lat")
 nc_lon <- ncvar_get(nc = nc, varid = "lon")
 
-pft <- raster(file.names[1])
-
-#Use the lat and lon vectors to create a grid represented as two vectors (note:
-#lon must go first to match with netcdf data)
 nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat)
-
-readin.proj=4269 #because it works with the lat and lons provided
+readin.proj=4269 
 
 #Converting nc coordinates from vector form to simple feature (sf)
 g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>% 
@@ -46,7 +72,6 @@ bridge.cbsa <- st_join(g.nc.coords,us_cbsa,left=T) %>%
   mutate(lon=as.vector(st_coordinates(.)[,1]),
          lat=as.vector(st_coordinates(.)[,2])) %>%
   filter(!is.na(cbsa)) 
-
 
 #make raster
 r_template <- raster(extent(g.nc.coords),
