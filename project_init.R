@@ -7,17 +7,21 @@ source("functions/init_functions.R")
 
 #Loading and installing packages
 init.pacs(c("tidyverse",      #shortcut to many useful packages (eg, dplyr, ggplot)
-            "conflicted",     #resolves function conflict across packages
+            # "conflicted",     #resolves function conflict across packages
             "lubridate",      #working with dates
             "sf",             #for GIS
             "USAboundaries",  #easily access US maps in sf
             #"googledrive",    #for accessing googledrive
             #"furrr","foreach","doSNOW",
             "progress",       #for progress bars
-            #"raster",         #for working with raster data
+            "raster",         #for working with raster data
             "rgdal",          #GIS processing
             "ncdf4",          #accessing netcdf data
-            "haven"           #other stat datatypes
+            "haven",           #other stat datatypes
+            "furrr",
+            "raster",
+            "data.table",
+            "mapview"
 ))
 
 
