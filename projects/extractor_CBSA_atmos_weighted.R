@@ -24,6 +24,7 @@ load("_ref/geographies/geos.Rdata")
 # mapping of cells to CBSA w weights 
 #####
 
+fl <- file.names[1]
 slice <- brick(fl)[[1]]
 slicecoords <- tibble(lon = xyFromCell(slice, 1:ncell(slice))[,1],
                       lat = xyFromCell(slice, 1:ncell(slice))[,2]) %>%
@@ -37,17 +38,27 @@ uslandscan <- crop(landscan,extent(us_cbsa))
 uslandscan_res <- resample(uslandscan, slice, method = "bilinear")
 together <- raster::mosaic(slice,uslandscan_res,fun=sum)
 extract1 <- raster::extract(together,us_cbsa,
-                            weights = T, normalizeWeights = T, cellnumbers = T)
+                            weights = T, 
+                            # normalizeWeights = T, 
+                            cellnumbers = T)
 
 cb <- 1
+
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
 
 bridge.raster.all <- map_dfr(1:964,function(cb){
   
   temp <- extract1[[cb]] %>% 
     as.data.table() %>% 
     left_join(.,slicecoords,by="cell") %>% 
-    mutate(totalindex = value*weight/(sum(value)*max(weight)),
+    mutate(popindex = value/(sum(value))) %>% 
+    rowwise() %>% 
+    mutate(totalindex = (popindex+weight)/2,
+           totalindex.g = gm_mean(popindex,weight),
            cbsa = us_cbsa[cb,]$geoid) %>% 
+    ungroup() %>% 
     dplyr::select(cbsa,lon,lat,totalindex)
   
 })
@@ -61,13 +72,20 @@ bridge.raster.all <- read_csv("projects/bridge_raster_cbsa.csv") %>%
 #####
 # extracting data and rolling up to cbsa w weights
 #####
-fldr <- folder.names[1]
+nc <- nc_open(file.names[1])
+nc_lat <- ncvar_get(nc = nc, varid = "lat")
+nc_lon <- ncvar_get(nc = nc, varid = "lon")
+nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat)
+
+fldr <- folder.names[4]
+files.all <- str_subset(file.names,fldr)
 fl <- files.all[1]
 
-grimet.out <- map(folder.names, function(fldr){
+# options(future.globals.maxSize= 1024^2*1000*8)
+gridmet.out <- map(folder.names[2:length(folder.names)], function(fldr){
   
   files.all <- str_subset(file.names,fldr)
-  
+ 
   year.single <- map(files.all, function(fl){
     
     nc <- nc_open(fl)
@@ -90,18 +108,20 @@ grimet.out <- map(folder.names, function(fldr){
     
     var.cbsa <- left_join(bridge.raster.all,
                           nc.df,
-                          by=c("lat","lon")) %>% 
+                          by=c("lat","lon")) 
+    %>% 
       pivot_longer(-c(lon,lat,cbsa,totalindex),
                    names_to = "date",
                    values_to = "value") %>% 
+      mutate(valueweighted = totalindex*value) %>% 
       group_by(cbsa,date) %>%
-      summarize(value=sum(prod(totalindex*value, 
-                               na.rm = T),na.rm = T)) %>%
+      summarize(value=sum(valueweighted)) %>%
       ungroup() %>%
       mutate(date=ymd(date))
     
     write_rds(var.cbsa,
               paste0("projects/output/",
+                     fldr,"_",
                      var.id,"_",
                      str_sub(fl,-7,-4),".rds"))
     
@@ -109,9 +129,29 @@ grimet.out <- map(folder.names, function(fldr){
 })
 
 
+t <- var.cbsa %>% 
+  pivot_longer(-c(lon,lat,cbsa,totalindex),
+               names_to = "date",
+               values_to = "value") %>% 
+  mutate(valueweighted = totalindex*value) %>% 
+  group_by(cbsa,date) %>%
+  summarize(check = sum(totalindex),
+            value=sum(valueweighted)) %>%
+  ungroup() %>%
+  mutate(date=ymd(date)) %>% 
+  filter(check = min(check))
+
+
+  # filter(cbsa == 43620)
+
+t2 <- t %>% 
+  filter(date == as_date("2000-01-01")) %>% 
+  mutate(valueweighted = totalindex*value) %>% 
+  summarize(value=sum(valueweighted))
+          
+
 
 ######
-
 
 
 
@@ -207,6 +247,7 @@ t <- extract2 %>%
 gridmet.out <- map(file.names,function(fl){
   
   slicegeneral <- brick(fl)[[1]]
+  cb <-1
   
   cbsa.out <- map_dfr(1:964,function(cb){
     
@@ -224,6 +265,7 @@ gridmet.out <- map(file.names,function(fl){
       mutate(areaindex = weight/max(weight),
              totalindex = (value*areaindex)/sum(value))
     
+    d <- 1
     days <- map_dfr(1:nlayers(brick(fl)), function(d){
       
       # slice of netcdf

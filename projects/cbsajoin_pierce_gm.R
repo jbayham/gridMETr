@@ -1,30 +1,38 @@
 library(tidyverse)
+library(lubridate)
 
+pmsmoke <- read_rds("../../../../RSTOR/pierce_pm/weighteddata.rds") %>% 
+  mutate(cbsa = as.numeric(cbsa))
 
-pmsmoke <- read_rds("../../../../RSTOR/pierce_pm/weighteddata.rds") 
+flgrid <- tibble(files = list.files("data/gridmetoutput_weighted", full.names = T),
+                 var = str_extract(str_sub(files,29,-10),".{2,4}(?=_)"))
+vars <- unique(flgrid$var)
+# v <- vars[1]
+# f <- flgrid.act$files[1]
 
-flgrid <- str_subset(list.files("data/cbsa_filtered", full.names = T),"summed")
-fg <- flgrid[2]
-
-r1 <- read_rds(flgrid[1]) %>% 
-  rename(!!str_sub(flgrid[1],27,-5) := value) 
-
-r2 <- map(flgrid[2:6],function(fg){
+allcbsa <- map(vars,function(v){
   
-  temp <- read_rds(fg) %>% 
-    reduce(.,bind_rows) %>% 
-    rename(!!str_sub(fg,27,-5) := value) 
+  flgrid.act <- flgrid %>% 
+    filter(var == v)
   
+  singlevar <- map_dfr(flgrid.act$files,function(f){
+    
+    temp <- read_rds(f) %>% 
+      rename(!!v := value)
+    
+  })
 })
 
-gm <- reduce(r2, left_join, by =c("cbsa","date")) %>% 
-  left_join(., r1, by=c("cbsa","date"))
+gm <- reduce(allcbsa, left_join, by =c("cbsa","date")) 
+all <- left_join(pmsmoke,gm,by=c("cbsa","date")) %>% 
+  mutate(Month = month(date)) %>% 
+  group_by(Month,cbsa) %>% 
+  summarise()
 
-all <- left_join(gm,pmsmoke,by=c("cbsa","date")) 
 
-write_csv(all,"../../../../RSTOR/pierce_pm/cbsa_daily_weightedpmsmoke_unweightedgm.csv")
 
-check <- all %>% 
-  filter(date >= as.Date("2006-01-01"),
-         !is.na(weightedpm25))
+write_csv(all,"../../../../RSTOR/pierce_pm/cbsa_daily_weightedpmsmoke_weightedgm.csv.gz")
 
+unweighted <- read_csv("../../../../RSTOR/pierce_pm/cbsa_daily_weightedpmsmoke_unweightedgm.csv")
+
+compar <- left_join(all,unweighted, by = c("cbsa","date"))
