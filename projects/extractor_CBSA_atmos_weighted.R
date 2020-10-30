@@ -44,20 +44,16 @@ extract1 <- raster::extract(together,us_cbsa,
 
 cb <- 1
 
-gm_mean = function(x, na.rm=TRUE){
-  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
-}
-
 bridge.raster.all <- map_dfr(1:964,function(cb){
   
   temp <- extract1[[cb]] %>% 
     as.data.table() %>% 
     left_join(.,slicecoords,by="cell") %>% 
-    mutate(popindex = value/(sum(value))) %>% 
+    mutate(areaindex = weight/max(weight),
+           popcount = value*areaindex,
+           totalindex = popcount/sum(popcount)) %>% 
     rowwise() %>% 
-    mutate(totalindex = (popindex+weight)/2,
-           totalindex.g = gm_mean(popindex,weight),
-           cbsa = us_cbsa[cb,]$geoid) %>% 
+    mutate(cbsa = us_cbsa[cb,]$geoid) %>% 
     ungroup() %>% 
     dplyr::select(cbsa,lon,lat,totalindex)
   
@@ -68,6 +64,9 @@ bridge.raster.all <- read_csv("projects/bridge_raster_cbsa.csv") %>%
   mutate(lon = round(lon,3),
          lat = round(lat,3))
 
+t <- bridge.raster.all %>% 
+  group_by(cbsa) %>% 
+  summarise(check = sum(totalindex))
 
 #####
 # extracting data and rolling up to cbsa w weights
@@ -81,12 +80,8 @@ fldr <- folder.names[4]
 files.all <- str_subset(file.names,fldr)
 fl <- files.all[1]
 
-# options(future.globals.maxSize= 1024^2*1000*8)
-gridmet.out <- map(folder.names[2:length(folder.names)], function(fldr){
-  
-  files.all <- str_subset(file.names,fldr)
- 
-  year.single <- map(files.all, function(fl){
+options(future.globals.maxSize= 1024^2*1000*8)
+gridmet.out <- future_map(file.names, function(fl){
     
     nc <- nc_open(fl)
     var.id=names(nc$var)
@@ -108,32 +103,25 @@ gridmet.out <- map(folder.names[2:length(folder.names)], function(fldr){
     
     var.cbsa <- left_join(bridge.raster.all,
                           nc.df,
-                          by=c("lat","lon")) 
-    %>% 
+                          by=c("lat","lon")) %>% 
       pivot_longer(-c(lon,lat,cbsa,totalindex),
                    names_to = "date",
                    values_to = "value") %>% 
       mutate(valueweighted = totalindex*value) %>% 
       group_by(cbsa,date) %>%
-      summarize(value=sum(valueweighted)) %>%
+      summarize(check=sum(totalindex),
+                value=sum(valueweighted, na.rm = T)) %>%
       ungroup() %>%
       mutate(date=ymd(date))
     
     write_rds(var.cbsa,
-              paste0("projects/output/",
-                     fldr,"_",
-                     var.id,"_",
+              paste0("data/gridmetoutput_weighted/",
+                     str_extract(str_sub(fl,6,-1),".{2,4}(?=/)"),"_",
                      str_sub(fl,-7,-4),".rds"))
-    
-  })
-})
+}, .progress = T)
 
 
 t <- var.cbsa %>% 
-  pivot_longer(-c(lon,lat,cbsa,totalindex),
-               names_to = "date",
-               values_to = "value") %>% 
-  mutate(valueweighted = totalindex*value) %>% 
   group_by(cbsa,date) %>%
   summarize(check = sum(totalindex),
             value=sum(valueweighted)) %>%

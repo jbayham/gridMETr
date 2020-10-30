@@ -1,11 +1,13 @@
 library(tidyverse)
 library(lubridate)
 
+rm(list = ls())
+
 pmsmoke <- read_rds("../../../../RSTOR/pierce_pm/weighteddata.rds") %>% 
   mutate(cbsa = as.numeric(cbsa))
 
 flgrid <- tibble(files = list.files("data/gridmetoutput_weighted", full.names = T),
-                 var = str_extract(str_sub(files,29,-10),".{2,4}(?=_)"))
+                 var = str_sub(files,29,-10))
 vars <- unique(flgrid$var)
 # v <- vars[1]
 # f <- flgrid.act$files[1]
@@ -18,16 +20,15 @@ allcbsa <- map(vars,function(v){
   singlevar <- map_dfr(flgrid.act$files,function(f){
     
     temp <- read_rds(f) %>% 
-      rename(!!v := value)
+      rename(!!v := value) %>% 
+      dplyr::select(-check)
     
   })
 })
 
 gm <- reduce(allcbsa, left_join, by =c("cbsa","date")) 
 all <- left_join(pmsmoke,gm,by=c("cbsa","date")) %>% 
-  mutate(Month = month(date)) %>% 
-  group_by(Month,cbsa) %>% 
-  summarise()
+  mutate(Month = month(date)) 
 
 
 

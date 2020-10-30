@@ -1,0 +1,181 @@
+---
+title: "A Weighted Average by Population and Area"
+author: "Sam Koss"
+date: "10/30/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.align = "center")
+```
+
+I want to create a weather (e.g. mean minimum temperature) estimate for an irregular census area based on a summary of the weather estimates in smaller square grids. Ideally, this rolled up estimate will include both the population in each sub-grid, as well as consider the amount of the sub-grid in the census area.
+
+First we will walk through a trivial example to clarify the necessary steps, and then apply these steps to data.
+
+## Example
+
+The polygon of a census area contains (or partially contains) 4 grids. 3 of them are fully contained, and 1 is half contained. Each grid has a population, as follows: 
+
+```{r echo=FALSE}
+t1 <- tibble("Grid" = c("Grid 1","Grid 2", "Grid 3", "Grid 4"),
+             "Population" = seq(100,400,100),
+             "Area Coverage" = c("0.287","0.143","0.287","0.287"))
+
+knitr::kable(t1, align = 'c') %>% 
+  kable_styling(full_width = F)
+```
+
+<br>
+
+The area coverage is how much of the polygon is in that cell. This can be converted to a weight by dividing the area coverage by the maximum area coverage:
+
+```{r echo=FALSE}
+t2 <- tibble("Grid" = c("Grid 1","Grid 2", "Grid 3", "Grid 4"),
+             "Population" = seq(100,400,100),
+             "Area Coverage" = c("0.287","0.143","0.287","0.287"),
+             "Area Weighted" = c("$\\frac{0.287}{0.287} = 1$",
+                                 "$\\frac{0.143}{0.287} = 0.5$",
+                                 "$\\frac{0.287}{0.287} = 1$",
+                                 "$\\frac{0.287}{0.287} = 1$"))
+
+knitr::kable(t2, align = 'c') %>% 
+  kable_styling(full_width = F)
+```
+
+<br>
+
+Our desired output is a weight that considers both the population and the area coverage. Generalized, we can say:
+
+$$AreaWeight_i = \frac{AreaCoverage_i}{max(AreaCoverage)}$$
+
+We can see the total population is $100+200+300+400 = 1,000$, but that we should only count half of grid 2, $100+(0.5)200+300+400 = 900$. We can call this a population count, achieved by:
+
+$$PopulationCount = \sum_{i=1}^{n.grids} AreaWeight_i*Population_i = \sum_{i=1}^{n.grids}Population Count_i$$. 
+
+We can then create a population weight based on this new total value,
+
+$$PopulationWeight_i = \frac{PopulationCount_i}{PopulationCount}$$.
+
+```{r echo=FALSE}
+t3 <- tibble("Grid" = c("Grid 1","Grid 2", "Grid 3", "Grid 4"),
+             "Population" = seq(100,400,100),
+             "Area Coverage" = c("0.287","0.143","0.287","0.287"),
+             "Area Weighted" = c("$\\frac{0.287}{0.287} = 1$",
+                                 "$\\frac{0.143}{0.287} = 0.5$",
+                                 "$\\frac{0.287}{0.287} = 1$",
+                                 "$\\frac{0.287}{0.287} = 1$"),
+             "Population Weight" = c("$\\frac{(1)100}{900}$",
+                                     "$\\frac{(0.5)200}{900}$",
+                                     "$\\frac{(1)300}{900}$",
+                                     "$\\frac{(1)400}{900}$"))
+
+knitr::kable(t3, align = 'c') %>% 
+  kable_styling(full_width = F)
+```
+
+<br>
+
+The sum of the population weights is $\frac{900}{900} = 1$, and we have our weights that we can multiply by the gridded observed weather to get a weather estimate for our irregular census area.
+
+<br>
+<br>
+
+## Applied to Data
+
+Loading in the [landscan data](https://landscan.ornl.gov/) for population, the [tigris data](https://catalog.data.gov/dataset/tiger-line-shapefile-2019-nation-u-s-current-metropolitan-statistical-area-micropolitan-statist) for our census polygons, and the [gridmet data](http://www.climatologylab.org/gridmet.html) for weather:
+
+```{r eval = F}
+library(tidyverse)
+library(raster)
+library(sf)
+library(ncdf4)
+
+landscan <- raster("/RSTOR/landscan/LandScan Global 2018/lspop2018/w001001.adf") # a raster
+load("_ref/geographies/geos.Rdata") # a shapefile
+fl <- netcdf[1] # a netcdf
+```
+
+Each library and spatial file type is worth reading about on their own, and all have decent enough documentation. For this part, I use raster operations on the netcdf, treating each slice of the brick (each day of the year in this case) as a raster, with extent and resolution identical to each other slice.
+
+```{r eval = F}
+# preparing the weather grid | gridmet
+slice <- brick(fl)[[1]] # a slice of one day of the netcdf
+slicecoords <- tibble(lon = xyFromCell(slice, 1:ncell(slice))[,1],
+                      lat = xyFromCell(slice, 1:ncell(slice))[,2]) %>%
+  rownames_to_column(var = "cell") %>% 
+  mutate(cell = as.numeric(cell)) # this gives us the coordinates corresponding to each gridmet cell, as well as a number
+```
+
+With the gridmet prepared, we need to get the gridmet grids (4km x 4km) to include a population measure. The landscan raster is 1km x 1km, so will need to be matched in extent (total area boundaries), resolution (grid alignment), and then summed with mosaic.
+
+```{r eval = F}
+# preparing the population grid | landscan
+uslandscan <- crop(landscan,extent(us_cbsa)) # getting the same extent
+uslandscan_res <- resample(uslandscan, slice, method = "bilinear") # getting the same resolution
+together <- raster::mosaic(slice,uslandscan_res,fun=sum) # compiling the population into the same grid size 
+```
+
+The last preperatory step is the area coverage, which `raster::extract` is quite adept at. 
+
+```{r eval = F}
+extract1 <- raster::extract(together,us_cbsa,
+                            weights = T,  
+                            cellnumbers = T)
+```
+
+The output is a list of dataframes, of length corresponding the number of polygons in `us_cbsa` that contains a cellnumber corresponding to that in `slicecoords`, and the $AreaCoverage$ of the grid as a portion of the area of the census area.
+
+Note this could have been any polygon (e.g. counties, states, a buffer around a school). The last step is to put it all together. I set it up to index `extract1` for the first list for the first cbsa: in this case Souix Falls, ND. I match each cell to the `slicecoords`, and set up the operations as described. 
+
+1. $Area Weight_i$
+2. $Population Count_i$
+3. $Population Weight_i$
+
+```{r eval = F}
+cb <- 1
+
+temp <- extract1[[cb]] %>% 
+  as.data.table() %>% 
+  left_join(.,slicecoords,by="cell") %>% 
+  mutate(areaweight = weight/max(weight), # area weight on i term
+         popcount = value*areaindex, # pop count on i term
+         popweight = popcount/sum(popcount)) %>% # pop weight on i term
+  rowwise() %>% 
+  mutate(cbsa = us_cbsa[cb,]$geoid) %>% 
+  ungroup() %>% 
+  dplyr::select(cbsa,lon,lat,totalindex)
+```
+
+And of course, I set up a loop to do this for each county:
+
+```{r eval = F}
+bridge.raster.all <- map_dfr(1:964,function(cb){
+  
+  temp <- extract1[[cb]] %>% 
+    as.data.table() %>% 
+    left_join(.,slicecoords,by="cell") %>% 
+    mutate(areaindex = weight/max(weight),
+           popcount = value*areaindex,
+           totalindex = popcount/sum(popcount)) %>% 
+    rowwise() %>% 
+    mutate(cbsa = us_cbsa[cb,]$geoid) %>% 
+    ungroup() %>% 
+    dplyr::select(cbsa,lon,lat,totalindex)
+  
+})
+
+test <- bridge.raster.all %>% 
+  group_by(cbsa) %>% 
+  summarise(check = sum(totalindex))
+
+sum(test != 1)
+```
+
+The test dataframe shows that all indices sum to 1.
+
+
