@@ -25,7 +25,7 @@ gridmetr_download <-
     var_ref <- suppressMessages(read_csv("_ref/variables_reference.csv")) %>%
       mutate(variable=str_to_lower(variable))
     map(variables,function(v){
-      if (!(v %in% var_ref$variable)) {
+      if (!(str_to_lower(v) %in% var_ref$variable)) {
         stop(str_c("Variable ",v," not valid gridMET variable"))
       }
     })
@@ -40,6 +40,7 @@ gridmetr_download <-
     #Construct a list of files from the variables and years  
     file.list <- expand.grid(variables,years,stringsAsFactors = F) %>% 
       rename(var=Var1,year=Var2) %>%
+      mutate(var=str_to_lower(var)) %>% 
       arrange(var) %>%
       mutate(file.name=str_c(var,"_",year,".nc")) 
     
