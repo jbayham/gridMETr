@@ -1,3 +1,12 @@
+rm(list = ls())
+variables <- c("pdsi","pr")
+years <- 2014:2019
+
+target.file <- "data/pdsi_test.nc"
+x <- 1
+
+y <- 2014
+
 gridmetr_download <- 
   function(variables,years){
     # Downloads data from gridMET
@@ -42,15 +51,19 @@ gridmetr_download <-
       rename(var=Var1,year=Var2) %>%
       mutate(var=str_to_lower(var)) %>% 
       arrange(var) %>%
-      mutate(file.name=str_c(var,"_",year,".nc")) 
+      mutate(file.name = ifelse(var == 'pdsi',"pdsi.nc",
+                                str_c(var,"_",year,".nc"))) %>% 
+      filter(var == 'pdsi' & year == max(year)
+             | var != 'pdsi')
     
-    #Create destination folder(s) if they don't exist
+     #Create destination folder(s) if they don't exist
     map(str_c("data/",variables),
         function(x){
           if(!dir.exists(x)){
             dir.create(x,recursive = T)}
         }  )
     
+    options(timeout = max(300, getOption("timeout")))
     #Download all files in list
     map(1:dim(file.list)[1],
                function(x){
@@ -64,14 +77,46 @@ gridmetr_download <-
                            destfile = target.file,
                            mode = 'wb')
                 }
+                
+                # if (file.list$var[x] == 'pdsi'){
+                #   
+                #   nc <- nc_open(target.file)
+                #   date.vector <- tibble("all.dates" = as_date(nc$dim$day$vals,origin="1900-01-01")) %>% 
+                #     rownames_to_column() %>% 
+                #     mutate(year = str_sub(all.dates,1,4),
+                #            rowname = as.numeric(rowname))
+                #   
+                #   map(years,function(y){
+                #     
+                #     date.keep <- date.vector %>% 
+                #       filter(year == as.character(y))
+                #     
+                #     slice <- brick(target.file)[[date.keep$rowname]]
+                #     
+                #     # writeRaster(slice, 
+                #     #             str_c("data/",file.list$var[x],"/",file.list$var[x],"_",y,".nc"), 
+                #     #             overwrite=TRUE,
+                #     #             format="CDF",
+                #     #             varname="pdsi",
+                #     #             varunit="index",
+                #     #             longname="pdsi -- raster stack to netCDF",
+                #     #             xname="Longitude",
+                #     #             yname="Latitude",
+                #     #             zname="Time")
+                #     
+                #   })
+                  
+                }
+                
               }
             )
     
-    #Would like to make this parallel in the future.  Currently, future doesn't
-    #work well when plan specified within a function 
-    #plan(multiprocess(workers = parallel.workers))
-
 }
-  
+
+
+#Would like to make this parallel in the future.  Currently, future doesn't
+#work well when plan specified within a function 
+#plan(multiprocess(workers = parallel.workers))
+
 
 

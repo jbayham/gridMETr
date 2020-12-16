@@ -77,11 +77,13 @@ fires.sitecodes <- nn.df %>%
          weather_date = as.Date(weather_date, "%m/%d/%Y"))
 
 write_csv(fires.sitecodes,"projects/bridge_fires.csv")
+fires.sitecodes <- read_csv("projects/bridge_fires.csv")
 
 #####
 # extracting data and rolling up to cbsa w weights
 #####
 nc <- nc_open(file.names$files[1])
+nc <- nc_open(fl)
 nc_lat <- ncvar_get(nc = nc, varid = "lat")
 nc_lon <- ncvar_get(nc = nc, varid = "lon")
 nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat) %>% 
@@ -89,7 +91,7 @@ nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat) %>%
 
 fldr <- folder.names[9]
 files.all <- str_subset(file.names$files,fldr)
-fl <- files.all[1]
+fl <- list.files("data/pdsi", full.names = T)
 pdsi <- file.names %>% 
   filter(str_detect(files,"pdsi"))
 
@@ -121,47 +123,75 @@ gridmet.out <- future_map(pdsi$files, function(fl){
       pivot_longer(-c(incident_number,incident_name,start,end,weather_date,loc.ID,Dist,lon,lat),
                    names_to = "date",
                    values_to = "value") %>% 
+      mutate(weather_date = as.Date(weather_date, "%m/%d/%Y"),
+             end = as.Date(weather_date, "%m/%d/%Y"),
+             date = ymd(date)) %>% 
       filter(date >= weather_date,
              date <= end+11)
   } else {
     var.fires <- left_join(fires.sitecodes,
                                  nc.df,
                                  by=c("lat","lon")) %>% 
-    pivot_longer(-c(incident_number,incident_name,start,end,weather_date,loc.ID,Dist,lon,lat),
-                 names_to = "date",
-                 values_to = "value") %>% 
-    filter(date >= weather_date,
-           date <= end)
+      pivot_longer(-c(incident_number,incident_name,start,end,weather_date,loc.ID,Dist,lon,lat),
+                   names_to = "date",
+                   values_to = "value") %>% 
+      mutate(weather_date = as.Date(weather_date, "%m/%d/%Y"),
+             end = as.Date(weather_date, "%m/%d/%Y"),
+             date = ymd(date)) %>% 
+      filter(date >= weather_date,
+             date <= end)
   }
   
   
   write_rds(var.fires,
             paste0("data/fires_subsetted/",
-                   str_extract(str_sub(fl,6,-1),".{2,4}(?=/)"),"_",
-                   str_sub(fl,-7,-4),".rds"))
+                   str_extract(str_sub(fl,6,-1),".{2,4}(?=/)"),".rds"))
   
 }, .progress = T)
 
+test <- nc.df %>% 
+  dplyr::select(1:3) %>% 
+  st_as_sf(coords = c("lon","lat"), crs = 4326) %>% 
+  sample_n(10000)
+
+mapview(test)
 
 outfiles <- list.files("data/fires_subsetted", full.names = T)
+outact <- str_subset(outfiles,"pdsi", negate = T)
 r <- read_rds("data/fires_subsetted/bi_2014.rds")
 
-allout <- map_dfr(outfiles,function(o){
+allout <- map_dfr(outact,function(o){
   
   r <- read_rds(o) %>% 
-    mutate(var = str_sub(o,22,-10)) %>% 
+    mutate(var = str_sub(o,22,-10),
+           start = as.Date(start, "%m/%d/%Y"),
+           date = ymd(date)) %>% 
     dplyr::select(-c(loc.ID,lon,lat,Dist))
   
 })
 
-write_csv(allout,"data/fires_weather.csv")
+pdsi <- read_rds(str_subset(outfiles,"pdsi", negate = F)) %>% 
+  mutate(var = "pdsi",
+         start = as.Date(start, "%m/%d/%Y"),
+         date = ymd(date)) %>% 
+  dplyr::select(-c(loc.ID,lon,lat,Dist))
 
-zerona <- allout %>% 
-  filter(var == "pdsi") %>% 
-  group_by(incident_number,incident_name,start,end) %>% 
+allout2 <- bind_rows(allout,pdsi) %>% 
+  filter(!is.na(value))
+
+write_csv(allout2,"data/fires_weather.csv")
+
+
+
+allout <- read_csv("data/fires_weather.csv") %>% 
+  filter(var == "pdsi")
+
+zerona <- allout2 %>%  
+  group_by(var) %>%
   summarise(na = sum(is.na(value)),
             zero = sum(value == 0, na.rm = T),
             obs = n())
+
 
 fires <- read_csv("data/fires.csv") %>% 
   mutate(start = as.Date(start, "%m/%d/%Y"),
