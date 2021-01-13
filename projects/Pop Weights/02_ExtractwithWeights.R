@@ -63,15 +63,15 @@ gridmet.out <- future_map(file.names, function(fl){
              lat = round(lat,3))
     
     var.polygon <- left_join(bridge.ready,
-                          nc.df,
-                          by=c("lat","lon")) %>% 
+                             nc.df,
+                             by=c("lat","lon")) %>% 
       pivot_longer(-c(lon,lat,UID,totalindex),
                    names_to = "date",
                    values_to = "value") %>% 
       mutate(valueweighted = totalindex*value) %>% 
       group_by(UID,date) %>%
-      summarize(check=sum(totalindex),
-                value=sum(valueweighted, na.rm = T)) %>%
+      summarize(check=sum(totalindex), #default option for index
+                value=sum(valueweighted, na.rm = T)) %>% #default aggregator
       ungroup() %>%
       mutate(date=ymd(date))
     

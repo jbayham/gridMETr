@@ -64,6 +64,8 @@ slicecoords <- tibble(lon = xyFromCell(slice, 1:ncell(slice))[,1],
   rownames_to_column(var = "cell") %>% 
   mutate(cell = as.numeric(cell))
 
+# y <- 2010
+
 # landscan coords | expect ~ 8-20 min / year
 map(years,function(y){
   
@@ -71,9 +73,9 @@ map(years,function(y){
   uslandscan <- crop(landscan,extent(polygonstomap))
   
   # matching them up
-  uslandscan_res <- resample(uslandscan, slice, method = "bilinear")
-  together <- raster::mosaic(slice,uslandscan_res,fun=sum)
-  extract1 <- raster::extract(together,polygonstomap,
+  uslandscan_res <- resample(uslandscan, slice, method = "bilinear") #same extent as netcdf
+  together <- raster::mosaic(slice,uslandscan_res,fun=sum) # aggregate to netcdf
+  extract1 <- raster::extract(together,polygonstomap, # roll up to polygon of interest
                               weights = T, 
                               # normalizeWeights = T, 
                               cellnumbers = T)
@@ -81,16 +83,18 @@ map(years,function(y){
   # create the bridge
   message("\n \n Rasters loaded and aligned for ",bridgename," polygons \n Creating the bridge \n")
   
-  bridge.raster.all <- map_dfr(1:nrow(polygonstomap),function(p2m){
+  p2m <- 1
+  
+  bridge.raster.all <- map2_dfr(extract1,polygonstomap$UID,function(e1,p2m){
     
-    temp <- extract1[[p2m]] %>% 
+    temp <- e1 %>% 
       as.data.table() %>% 
       left_join(.,slicecoords,by="cell") %>% 
       mutate(areaindex = weight/max(weight),
              popcount = value*areaindex,
              totalindex = popcount/sum(popcount)) %>% 
       rowwise() %>% 
-      mutate(UID = polygonstomap[p2m,]$UID) %>% 
+      mutate(UID = p2m) %>% 
       ungroup() %>% 
       dplyr::select(UID,lon,lat,totalindex)
     
