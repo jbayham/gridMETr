@@ -37,3 +37,10 @@ vignettes/*.pdf
 # Shiny token, see https://shiny.rstudio.com/articles/shinyapps.html
 rsconnect/
 .Rproj.user
+
+# RMD for chapter
+projects/Pop Weights/*.html
+projects/Pop Weights/*.nc
+projects/Pop Weights/*.zip
+projects/Pop Weights/*.rds
+projects/Pop Weights/LandScan Global 2018/
