@@ -1,6 +1,6 @@
 rm(list = ls())
-variables <- c("pdsi","pr")
-years <- 2014:2019
+variables <- c("tmmn","tmmx","pr")
+years <- 2003:2019
 
 target.file <- "data/pdsi_test.nc"
 x <- 1
@@ -106,7 +106,7 @@ gridmetr_download <-
                 #     
                 #   })
                   
-                }
+                
                 
               }
             )
@@ -119,4 +119,4 @@ gridmetr_download <-
 #plan(multiprocess(workers = parallel.workers))
 
 
-
+gridmetr_download(variables,years)

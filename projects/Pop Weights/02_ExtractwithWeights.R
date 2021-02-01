@@ -11,9 +11,14 @@
 #####
 # prep
 #####
+folder.names <- c("pr","tmmn","tmmx")
+file.names <- list.files("data",recursive = T,pattern = ".nc",full.names = T)
+years <- 2003:2019
+bridgename <- "County" # name to create reference
+
 bridges.all <- tibble(bridgefile = list.files("Data/LandScan_Bridges", full.names = T),
                       year = str_extract(bridgefile,"\\d+"),
-                      polygon = str_sub(bridgefile,23,-10))
+                      polygon = str_sub(bridgefile,23,-10)) 
 
 if(!dir.exists("data/Landscan_Weighted_Output")){dir.create("data/Landscan_Weighted_Output")}
 if(!dir.exists(paste0("data/Landscan_Weighted_Output/",bridgename))){
@@ -29,11 +34,11 @@ nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat)
 
 # fldr <- folder.names[1]
 # files.all <- str_subset(file.names,fldr)
-# fl <- files.all[1]
+fl <- file.names[1]
 
 plan(multisession, workers = 2)
-# options(future.globals.maxSize= 1024^2*1000*8)
-gridmet.out <- future_map(file.names, function(fl){
+options(future.globals.maxSize= 1024^2*1000*8)
+gridmet.out <- map(file.names[45:54], function(fl){
     
     nc <- nc_open(fl)
     var.id=names(nc$var)
@@ -42,9 +47,19 @@ gridmet.out <- future_map(file.names, function(fl){
     date.vector <- as_date(nc$dim$day$vals,origin="1900-01-01")
     
     #choose and load correct bridge
-    bridge <- bridges.all %>% 
-      filter(year == unique(year(date.vector)),
-             polygon == bridgename)
+    if (unique(year(date.vector)) > 2018) {
+      
+      bridge <- bridges.all %>% 
+        filter(year == 2018,
+               polygon == bridgename)
+      
+    } else {
+      
+      bridge <- bridges.all %>% 
+        filter(year == unique(year(date.vector)),
+               polygon == bridgename)
+      
+    }
     
     bridge.ready <- read_csv(bridge$bridgefile) %>% 
       mutate(lon = round(lon,3),
@@ -80,7 +95,7 @@ gridmet.out <- future_map(file.names, function(fl){
                      str_extract(str_sub(fl,6,-1),".{2,4}(?=/)"),"_",
                      str_sub(fl,-7,-4),".rds"))
     
-}, .progress = T)
+})
 
 
 # t <- var.cbsa %>% 
