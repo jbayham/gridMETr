@@ -6,7 +6,7 @@
 #  in the cell, using landscan data 
 #  for population in that year
 ############################################
-
+source('project_init.R')
 rm(list = ls())
 
 #####
@@ -15,7 +15,7 @@ rm(list = ls())
 
 # define variables (folders) and years (files) to extract 
 folder.names <- c("pr")
-years <- 2000:2018
+years <- 2018
 
 ####################
 
@@ -47,14 +47,23 @@ map(years,function(y){
 #####
  
 # define polygons 
-df <- us_co # data to use
-id <- "geoid" # existing column in data for UID
-bridgename <- "County" # name to create reference
+st <- state.abb[3]
+df <- map(state.abb,function(st){
+  
+  t <- tigris::block_groups(state = st)
+  
+})
+
+dfall <- reduce(df,bind_rows)
+
+# df <- us_co # data to use
+id <- "GEOID" # existing column in data for UID
+bridgename <- "CBG" # name to create reference
 
 ####################
 
-polygonstomap <- df %>% 
-  mutate(UID = geoid)
+polygonstomap <- dfall %>% 
+  rename(UID = id)
 
 # prep netcdf coords
 fl <- file.names[1]
