@@ -20,8 +20,14 @@ g.nc.coords <- tibble("lon" = as.vector(pm_lon),
   st_as_sf(coords = c("lon","lat")) %>% 
   st_set_crs(readin.proj)
 
+#updated poughkeepsie and NYC
+cbsa2 <- read_sf("data/cbsa19/tl_2019_us_cbsa.shp") %>% 
+  # filter(GEOID %in% c("35620", "39100")) %>% 
+  dplyr::select(geoid = GEOID,
+                name = NAME)
+
 #Attaching geographic data to netcdf grid -- ignore warning
-bridge.cbsa <- st_join(g.nc.coords,us_cbsa,left=T) %>% 
+bridge.cbsa <- st_join(g.nc.coords,cbsa2,left=T) %>% 
   dplyr::select(cbsa=geoid) %>%
   mutate(lon=as.vector(st_coordinates(.)[,1]),
          lat=as.vector(st_coordinates(.)[,2])) %>%
@@ -41,10 +47,9 @@ poptotals <- pop %>%
   ungroup() %>% 
   dplyr::select(cbsa,lon,lat,popweight)
 
-write_rds(poptotals,"/RSTOR/pierce_pm/cbsa_popweights.rds")
-poptotals <- read_rds("/RSTOR/pierce_pm/cbsa_popweights.rds")
+write_rds(poptotals,"/RSTOR/pierce_pm/cbsa2_popweights.rds")
 
-j <- 3
+j <- 5
 i <- 1 
 
 for(j in 1:length(outer.shell)){
@@ -112,22 +117,22 @@ for(j in 1:length(outer.shell)){
               weightedhms = sum(popweight*hms, na.rm = T)) %>%
     ungroup()
 
-  write_rds(background.final,paste0("data/pierce_bg/",paste0(2006+j-1),".rds"))
+  write_rds(background.final,paste0("data/pierce_bg/census2019_",paste0(2006+j-1),".rds"))
   
 }
 
-fl <- str_subset(list.files("data/pierce_bg", full.names = T),"census2019", negate = T)
+fl <- str_subset(list.files("data/pierce_bg", full.names = T),"census2019")
 alltogether <- map_dfr(fl,function(f){
   
   t <- read_rds(f)
   
 })
 
-write_rds(alltogether,"../../../../RSTOR/pierce_pm/weighteddata2.rds")
+write_rds(alltogether,"../../../../RSTOR/pierce_pm/weighteddata2_census2019.rds")
 
-
-
-
+n_distinct(alltogether$cbsa)
+# 39100 poghkeep
+# 35620 nyc
 
 #####
 # very long, fewer rolling mean issues

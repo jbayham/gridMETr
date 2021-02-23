@@ -44,3 +44,6 @@ projects/Pop Weights/*.nc
 projects/Pop Weights/*.zip
 projects/Pop Weights/*.rds
 projects/Pop Weights/LandScan Global 2018/
+projects/*.html
+projects/*.csv
+projects/*.xlsx
