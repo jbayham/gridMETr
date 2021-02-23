@@ -1,0 +1,123 @@
+---
+title: "Extracting Data from a NetCDF"
+subtitle: "Using ncdf4 Functions"
+author: "Gal Koss and Jude Bayham"
+date: "02/22/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(raster)
+library(sf)
+library(knitr)
+library(mapview)
+library(ggmap)
+library(ggthemes)
+library(kableExtra)
+library(data.table)
+library(ncdf4)
+library(stars)
+knitr::opts_chunk$set(echo = T,
+                      results = 'hide',
+                      message = F,
+                      warning = F,
+                      fig.align = "center")
+```
+<br>
+<br>
+
+## NetCDF with raster
+<br>
+The `ncdf4` package is specially built to handle netCDF4 objects, and can in many cases be easier, if not faster, than using `raster` functions. Again, to start, we download from a gridmet API using the `downloader` package. We set the destination file name (what to call the file and where we want to it to be), and the mode to `wb` for a binary download. 
+
+This time, instead of ingesting the file as a RasterBrick or RasterLayer, we open it as a `ncdf4` object, a list.
+
+```{r eval = T}
+#--- download gridMET precipitation 2018 ---#
+downloader::download(url=str_c("http://www.northwestknowledge.net/metdata/data/pr_2018.nc"),
+                     destfile = "pr_2018.nc",
+                     mode = 'wb')
+
+#--- ingest the file ---#
+nc <- nc_open("pr_2018.nc") 
+nc
+```
+```{r echo=FALSE, results="show"}
+nc
+```
+
+We can once again see that we have a spatially and temporally explicit object in 3 dimensions: longitude, latitude, and time. We can see that there are 365 units of time in this file, and that the unit is day. For each day, we have 585x1386=810,810 cells. We also see the projection, and global attributes for all files in `gridMET`.
+
+To access the values used for each dimension, we can use the function `ncvar_get()`, passing in the name of the open netCDF file and the name of the dimension. Doing so gives us a vector: in the case of the grid centroids, we have the unique longitudes and latitudes: to get the centroids of all grids we use `expand.grid` to get all combinations. For the dates, we can convert the date number to a date value, and we can also get the name of the variable in the file using `names(nc$var)`.
+```{r eval = T}
+#--- access the coordinates ---#
+nc_lat <- ncvar_get(nc = nc, varid = "lat")
+nc_lon <- ncvar_get(nc = nc, varid = "lon")
+nc_coords <- expand.grid(lon=nc_lon,lat=nc_lat)
+
+#--- access the days ---#
+nc_dates <- as_date(ncvar_get(nc = nc, varid = "day"),origin="1900-01-01")
+
+#--- access the variable name ---#
+var.id <- names(nc$var)
+```
+<br>
+<br>
+<br>
+
+### Extracting Data
+<br>
+We can extract the data using the same function `ncvar_get`. When we use `ncvar_get` on the variable, we are pulling the 3-dimensional data out of the netCDF. While we lose the spatial and temporal data stored in the file, we are left with an array that contains only the data values in the same dimensions. We can then pair the data with the locations and time as needed as we operate on that multi-dimensional data using tidy techniques to run our analysis.
+
+You will notice the empty index values in the brackets with 3 index places; these correspond to the order of dimensions in the file, longitude, latitude, and day.
+```{r eval = T}
+#--- calling the named layer ---#
+nc.data <- ncvar_get(nc = nc, varid = var.id)[,,]
+dim(nc.data)
+```
+```{r echo=FALSE, results="show"}
+dim(nc.data)
+```
+
+We can put the data into something much more tidy-able by using these dimensions to create a rectangular dataframe. We rename the columns, bind the columns with the coordinates, and we have something we can put into tidy data.
+
+```{r eval = F}
+#--- value dataframe ---#
+dim <- c(prod(dim(nc.data)[1:2]),dim(nc.data)[3])
+
+df <- array(nc.data,dim = dim) %>%
+  as_tibble(.name_repair = "universal") %>%
+  rename_all(~str_c(nc_dates)) %>% 
+  bind_cols(nc_coords,.)
+
+#--- value tidy ---#
+df.tidy <- df %>% 
+  pivot_longer(-c(lon,lat),
+                 names_to = "date",
+                 values_to = "value") %>% 
+  mutate(date=ymd(date))
+```
+In the last step is when you can introduce polygons over which to aggregate. You can join `df` with a bridge that maps each grid centroid to a polygon of interest. Then you can aggregate (`group_by(polygon,day) %>% summarise`) over time and space to get data on a relevant scale.
+<br>
+<br>
+<br>
+
+### Subsetting Cells or Days
+<br>
+To subset the data by location or day, you can take advantage of the indexing when you read the data into a multi-dimensional array. To subset by day, you can pass index values into the third index location when you subset the data values. This is one example of how to get the data from all grids in September from the netCDF.
+```{r eval = F}
+#--- preparing the index ---#
+nc_dates_sep <- tibble(dates = as_date(ncvar_get(nc = nc, varid = "day"),origin="1900-01-01")) %>% 
+  rownames_to_column("index") %>% 
+  filter(month(dates) == 9)
+
+dates_index <- nc_dates_sep$index[1]:nc_dates_sep$index[nrow(nc_dates_sep)]
+
+#--- subsetting by days ---#
+nc.data <- ncvar_get(nc = nc, varid = var.id)[,,dates_index]
+```
+To subset by grid, you pass through the grids' index values into the data's first two index locations.
