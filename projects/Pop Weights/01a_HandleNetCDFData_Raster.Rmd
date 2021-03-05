@@ -1,0 +1,178 @@
+---
+title: "Extracting Data from a NetCDF"
+subtitle: "Using Raster Functions"
+author: "Gal Koss and Jude Bayham"
+date: "02/22/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(raster)
+library(sf)
+library(knitr)
+library(mapview)
+library(ggmap)
+library(ggthemes)
+library(kableExtra)
+library(data.table)
+library(ncdf4)
+library(stars)
+knitr::opts_chunk$set(echo = T,
+                      results = 'hide',
+                      message = F,
+                      warning = F,
+                      fig.align = "center")
+```
+<br>
+<br>
+
+## Before You Start
+
+<br>
+When working with spatially explicit data, it can be insightful to use climate variables. Many climate and atmospheric datasets are stored as [netCDFs](https://pjbartlein.github.io/REarthSysSci/raster_intro.html) -- a multidimensional file format that resembles a raster brick. A netCDF has a slice for each time interval, and each slice contains the coordinates of the grid centroid and the variable estimate in that grid. [gridMET](http://www.climatologylab.org/gridmet.html) is one dataset that has max and min temperatures, precipitation, wind speed, and humidity (among other variables) available daily for the United States, with an estimate for every 4 km x 4 km cell. gridMET data is available in the [Google Earth Engine Data Catalog](https://developers.google.com/earth-engine/datasets/), which can be accessed with the R library [`rgee`](https://github.com/r-spatial/rgee). 
+<br>
+<br>
+In this section, we will describe two methods for extracting data from a netCDF, using gridMET data as an example. We first will use the [`raster`](https://cran.r-project.org/web/packages/raster/raster.pdf) library, treating the netCDF as a `raster` object. Then, we will use the [`ncdf4`](https://pjbartlein.github.io/REarthSysSci/netCDF.html) library to access the data with its netCDF-specific functions.
+<br>
+<br>
+<br>
+
+## NetCDF with raster
+<br>
+A netCDF file is both spatially and temporally explicit, and can be handled similarly to a raster object. To start, we download from a gridmet API using the `downloader` package. We set the destination file name (what to call the file and where we want to it to be), and the mode to `wb` for a binary download. Then we use `raster::brick()` to ingest the raster file.
+
+```{r eval = T}
+#--- download gridMET precipitation 2018 ---#
+downloader::download(url=str_c("http://www.northwestknowledge.net/metdata/data/pr_2018.nc"),
+                     destfile = "pr_2018.nc",
+                     mode = 'wb')
+
+#--- ingest the file ---#
+brick <- raster::brick("pr_2018.nc") # can ignore warning
+brick
+```
+```{r echo=FALSE, results="show"}
+brick
+```
+
+We see this is a 3 dimensional object of class `RasterBrick`, with 365 "slices" (nlayers) in the brick. Each slice has 810,810 grids, of dimensions 585x1386. The resolution is given in the same units as the crs (WGS84), in this case decimal degrees. Each cell has width and height of approximately 1/24$^{th}$ of a degree, or 4km. The number of layers corresponds to the days in 2018, which are given as the days since January 1$^{st}$, 1990. This is also the convention used in the naming of each slice.
+<br>
+<br>
+<br>
+
+### Subsetting Days
+<br>
+We can access an individual slice either by calling the named layer of the brick, or by indexing the brick.
+
+```{r eval = T}
+#--- calling the named layer ---#
+slice1 <- brick$X43099
+
+#--- indexing the brick ---#
+slice2 <- brick[[1]]
+
+identical(slice1,slice2)
+```
+```{r echo=FALSE, results="show"}
+identical(slice1,slice2)
+```
+
+We can even use the indexing when reading in the raster brick, to limit what we read into memory.
+
+```{r eval = F}
+#--- indexing as we read in ---#
+slice3 <- raster::brick("pr_2018.nc")[[1]]
+```
+
+The resulting slice -- whichever way you slice it -- is a single RasterLayer.
+<br>
+<br>
+<br>
+
+### Subsetting Cells
+<br>
+In addition to accessing individual slices of the brick, we can also pull a column out of it, taking all days' observations for a group of cells. For instance, to get the data for all counties in Colorado, we can use `raster::crop()` on the brick and the `sf` object of counties.
+```{r eval = T}
+#--- preparing the county sf ---#
+colorado_counties <- tigris::counties(state = "CO")
+
+#--- cropping the brick to the counties ---#
+column <- raster::crop(brick,colorado_counties)
+
+column
+```
+```{r echo=FALSE, results="show"}
+column
+```
+We still have 365 layers, but now only 96x169 grids, covering Colorado. Unlike when we extract a slice and were left with a layer, in extracting a column we are left with a RasterBrick once again.
+
+<br>
+<br>
+<br>
+
+### Extracting Data
+<br>
+To access the values, we can either index the objects, or we can use `raster::values`. Here we use the empty index values to take the entirety of the brick. If we knew the cell's index values (for instance, the 100$^{th}$ row and cell), we could extract the data using that index: `brick[100,100]`.
+
+```{r eval = T}
+#--- indexing the brick, all ---#
+vals_brick <- brick[,]
+
+#--- using the values function ---#
+vals_brick_addl <- raster::values(brick)
+
+dim(vals_brick)
+```
+```{r echo=FALSE, results="show"}
+dim(vals_brick)
+```
+
+The result is a matrix with 810,810 rows and 365 columns. This is familiar: we have a row for each grid cell, and a column for each day. With this information, we can turn the matrix into a more usable data frame.
+
+First, using `base::names` we can extract the dates. Then we remove the leading "X", convert from character to numeric and then make it a date using the origin from the raster.
+Then, using `raster::coordinates` we get the latitude and longitude of each cell as a matrix we can index.
+
+We bind rename the columns, make new columns with the coordinates, and we have something we can put into tidy data.
+
+```{r eval = F}
+#--- get the dates ---#
+dates <- as.Date(as.numeric(str_remove(names(brick),"X")), origin = "1900-01-01")
+
+#--- get the coordinates ---#
+coords <- raster::coordinates(brick)
+
+#--- value dataframe ---#
+df <- vals_brick %>% 
+  as.data.frame() %>% 
+  rename_all(~str_c(dates)) %>% 
+  mutate(lon = coords[,1],
+         lat = coords[,2]) 
+
+#--- value tidy ---#
+df.tidy <- df %>% 
+  pivot_longer(-c(lon,lat),
+                 names_to = "date",
+                 values_to = "value") %>% 
+  mutate(date=ymd(date))
+```
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+---
+
+Note, that we can also use `terra::rast` or `stars::read_stars` to ingest the netCDF as a raster, with similar results.
+```{r eval = F}
+slice <- terra::rast("pr_2018.nc")
+slice <- stars::read_stars("pr_2018.nc")
+```
+
+
