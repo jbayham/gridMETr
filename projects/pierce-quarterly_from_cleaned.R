@@ -1,11 +1,12 @@
 library(pacman)
 p_load(tidyverse,data.table,lubridate,measurements,tigris,janitor,sf,conflicted)
 
+conflict_prefer("select", "dplyr")
 conflict_prefer("filter", "dplyr")
 conflict_prefer("year", "lubridate")
 ###################################################
 #Construct metro labels
-metro <- read_sf("data/cbsa19/tl_2019_us_cbsa.shp") %>% 
+metro <- read_sf("data/tl_2018_us_cbsa/tl_2018_us_cbsa.shp") %>% 
   filter(LSAD=="M1") %>%
   st_set_geometry(NULL)
 
@@ -16,7 +17,7 @@ metro <- read_sf("data/cbsa19/tl_2019_us_cbsa.shp") %>%
 #   filter(lsad=="M1") %>%
 #   st_set_geometry(NULL)
 
-metro_names <- select(metro,GEOID,NAME) %>%
+metro_names <- dplyr::select(metro,GEOID,NAME) %>%
   mutate(geoid= as.numeric(GEOID))
 
 
@@ -24,7 +25,7 @@ metro_names <- select(metro,GEOID,NAME) %>%
 pd <- fread("../../../../RSTOR/pierce_pm/cbsa_daily_weightedpmsmoke_weightedgm.csv.gz",keepLeadingZeros = T) 
 
 #New PM data using adjustment
-pmdata <- read_rds("../../../../RSTOR/pierce_pm/weighteddata2_census2019.rds")
+pmdata <- read_rds("../../../../RSTOR/pierce_pm/weighteddata2_census2018.rds")
 
 
 
@@ -52,7 +53,7 @@ pd_q <- pd %>%
   drop_na() %>%
   select(cbsa,NAME,starts_with("weighted"),everything())
 
-fwrite(pd_q,file = "../../../../RSTOR/pierce_pm/pm_weather_quarterly_mean.csv")
+fwrite(pd_q,file = "../../../../RSTOR/pierce_pm/pm_weather_quarterly_mean_18.csv")
 
 #Quarterly quantiles
 pd_q_quan <- pd %>%
@@ -71,7 +72,38 @@ pd_q_quan <- pd %>%
   inner_join(metro_names,by=c("cbsa"="geoid")) %>%
   select(cbsa,NAME,quarter,starts_with("weighted"),everything())
 
-fwrite(pd_q_quan,file = "../../../../RSTOR/pierce_pm/pm_weather_quarterly_quartiles.csv")
+fwrite(pd_q_quan,file = "../../../../RSTOR/pierce_pm/pm_weather_quarterly_quartiles_18.csv")
 
+#Quarterly means, new pm data
+pd_q2 <- pmdata %>%
+  group_by(cbsa,quarter=lubridate::quarter(date,with_year = T)) %>%
+  summarize(across(c(weightedpm25,weightedpmbnew),~mean(.,na.rm = T)),
+            across(c(weightedpmover,weightedhms),~sum(.,na.rm = T))) %>%
+  ungroup() %>% 
+  inner_join(metro_names,by=c("cbsa"="GEOID")) %>%
+  drop_na() %>%
+  dplyr::select(cbsa,NAME,starts_with("weighted"),everything())
+
+fwrite(pd_q2,file = "../../../../RSTOR/pierce_pm/pmonly_quarterly_mean_18.csv")
+
+#Quarterly quantiles, new pm
+pd_q_quan2 <- pmdata %>%
+  drop_na() %>%
+  group_by(cbsa,quarter=lubridate::quarter(date,with_year = T)) %>%
+  summarize(across(c(weightedpm25,weightedpmbnew),list(mean=~mean(.),
+                                                min=~min(.),
+                                                q25=~quantile(.,probs = .25),
+                                                median=~quantile(.,probs = .5),
+                                                q75=~quantile(.,probs = .75),
+                                                max=~max(.))),
+            across(c(weightedpmover,weightedhms),sum)) %>%
+  ungroup() %>% 
+  inner_join(metro_names,by=c("cbsa"="GEOID")) %>%
+  dplyr::select(cbsa,NAME,quarter,starts_with("weighted"),everything())
+
+fwrite(pd_q_quan2,file = "../../../../RSTOR/pierce_pm/pmonly_quarterly_quartiles_18.csv")
+
+t1 <- fread(file = "../../../../RSTOR/pierce_pm/pm_weather_quarterly_quartiles_18.csv")
+t2 <- fread(file = "../../../../RSTOR/pierce_pm/pm_weather_quarterly_mean_18.csv")
 
 #pd_q_quan <- fread("L:/My Drive/Projects/EV_pollution/data_outputs/pm_weather_quarterly_quartiles.csv")
