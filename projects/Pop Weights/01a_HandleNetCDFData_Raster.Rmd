@@ -64,56 +64,6 @@ We see this is a 3 dimensional object of class `RasterBrick`, with 365 "slices" 
 <br>
 <br>
 
-### Subsetting Days
-<br>
-We can access an individual slice either by calling the named layer of the brick, or by indexing the brick.
-
-```{r eval = T}
-#--- calling the named layer ---#
-slice1 <- brick$X43099
-
-#--- indexing the brick ---#
-slice2 <- brick[[1]]
-
-identical(slice1,slice2)
-```
-```{r echo=FALSE, results="show"}
-identical(slice1,slice2)
-```
-
-We can even use the indexing when reading in the raster brick, to limit what we read into memory.
-
-```{r eval = F}
-#--- indexing as we read in ---#
-slice3 <- raster::brick("pr_2018.nc")[[1]]
-```
-
-The resulting slice -- whichever way you slice it -- is a single RasterLayer.
-<br>
-<br>
-<br>
-
-### Subsetting Cells
-<br>
-In addition to accessing individual slices of the brick, we can also pull a column out of it, taking all days' observations for a group of cells. For instance, to get the data for all counties in Colorado, we can use `raster::crop()` on the brick and the `sf` object of counties.
-```{r eval = T}
-#--- preparing the county sf ---#
-colorado_counties <- tigris::counties(state = "CO")
-
-#--- cropping the brick to the counties ---#
-column <- raster::crop(brick,colorado_counties)
-
-column
-```
-```{r echo=FALSE, results="show"}
-column
-```
-We still have 365 layers, but now only 96x169 grids, covering Colorado. Unlike when we extract a slice and were left with a layer, in extracting a column we are left with a RasterBrick once again.
-
-<br>
-<br>
-<br>
-
 ### Extracting Data
 <br>
 To access the values, we can either index the objects, or we can use `raster::values`. Here we use the empty index values to take the entirety of the brick. If we knew the cell's index values (for instance, the 100$^{th}$ row and cell), we could extract the data using that index: `brick[100,100]`.
@@ -159,6 +109,55 @@ df.tidy <- df %>%
                  values_to = "value") %>% 
   mutate(date=ymd(date))
 ```
+<br>
+<br>
+<br>
+
+### Subsetting Days
+<br>
+We can access an individual slice either by calling the named layer of the brick, or by indexing the brick. 
+
+```{r eval = T}
+#--- calling the named layer ---#
+slice1 <- brick$X43099
+
+#--- indexing the brick ---#
+slice2 <- brick[[1]]
+
+identical(slice1,slice2)
+```
+```{r echo=FALSE, results="show"}
+identical(slice1,slice2)
+```
+
+We can even use the indexing when reading in the raster brick, to limit what we read into memory.
+
+```{r eval = F}
+#--- indexing as we read in ---#
+slice3 <- raster::brick("pr_2018.nc")[[1]]
+```
+
+The resulting slice -- whichever way you slice it -- is a single RasterLayer.
+<br>
+<br>
+<br>
+
+### Subsetting Cells
+<br>
+In addition to accessing individual slices of the brick, we can also pull a column out of it, taking all days' observations for a group of cells. For instance, to get the data for all counties in Colorado, we can use `raster::crop()` on the brick and the `sf` object of counties.
+```{r eval = T}
+#--- preparing the county sf ---#
+colorado_counties <- tigris::counties(state = "CO")
+
+#--- cropping the brick to the counties ---#
+column <- raster::crop(brick,colorado_counties)
+
+column
+```
+```{r echo=FALSE, results="show"}
+column
+```
+We still have 365 layers, but now only 96x169 grids, covering Colorado. Unlike when we extract a slice and were left with a layer, in extracting a column we are left with a RasterBrick once again.
 
 <br>
 <br>
