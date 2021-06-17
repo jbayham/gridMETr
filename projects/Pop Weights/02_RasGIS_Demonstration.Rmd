@@ -2,7 +2,7 @@
 title: "A Weighted Average by Population and Area"
 subtitle: "Weather from a netCDF"
 author: "Gal Koss and Jude Bayham"
-date: "03/23/2020"
+date: "06/17/2020"
 output: html_document
 editor_options: 
   chunk_output_type: console
@@ -30,21 +30,25 @@ knitr::opts_chunk$set(echo = T,
 ## Before You Start
 
 <br>
-As a demonstration for using R as GIS, in this section we describe a method for extracting data from a netCDF, using [gridMET](http://www.climatologylab.org/gridmet.html) data as an example. In this instance, we use spatially and temporally explicit precipitation data to understand the impact of rain on fatal car crashes.
+In this section we describe a method for extracting data from a netCDF, to construct a dataset for regression analysis. In this instance, we use spatially and temporally explicit precipitation data from [gridMET](http://www.climatologylab.org/gridmet.html) to understand the impact of rain on fatal car crashes. 
 <br>
 <br>
-Generally, when extracting data from a netCDF intended to describe the climate in a polygon (e.g. a county), it is worthwhile computationally (both in operating and storage) to aggregate the data as you extracts it. The innovation that we describe allows you to aggregate the data for any polygon, with weights for the population in each gridMET cell (using [LandScan](https://landscan.ornl.gov) raster data) and the portion of the gridMET cell within the polygon of interest. Weighting by area allows you to accurately consider the climate variable values in cells only partially contained within the polygon. Weighting by population allows the aggregated estimate to take into account the weather experienced by people in the polygon, as opposed to an unweighted aggregation that would consider the rain in an empty field as impactful as the rain in a  populated residential neighborhood. It is important to weight by population in this case since the model relies on weather's impacts on people and we assume that both population and weather are spatially heterogeneous within a polygon. 
+Researchers often want to construct population-weighted exposure metrics when working with gridded environmental data.  We describe a method to construct a population-weighted rainfall exposure metric for an arbitrary polygon (this method can be adapted to other gridMET variables or other gridded datasets).  Weighting by population allows the aggregated estimate to take into account the weather experienced by people in the polygon, as opposed to an unweighted aggregation that would consider the rain in an empty field as impactful as the rain in a populated residential neighborhood. It is important to weight by population in this case since the model relies on weather’s impacts on people and we assume that both population and weather are spatially heterogeneous within a polygon.
 <br>
 <br>
-We will start by downloading a sample gridMET netCDF, a dataframe of polygons, and population data in [Setting Up]. In [Weighting], we use raster operations to align the cells from LandScan and gridMET, and build a bridge between the gridMET cells and polygons that uses population and area to create a total index for each gridmet cell for each polygon. We extract precipitation values from the netCDF using the bridge in [Extracting], and end up with rainfall by county and day. Finally, we estimate the relationship between rainfall and car accidents in a simple linear regression model in [Regression].
+We start by downloading a sample gridMET netCDF, a dataframe of polygons, and population data in [Setting Up]. In [Weighting], we use raster operations to align the cells from LandScan and gridMET, and build a “bridge” between the gridMET cells and polygons that uses population and area to create a total index for each gridmet cell for each polygon. We extract precipitation values from the netCDF using the bridge in [Extracting], and end up with rainfall by county and day. Finally, we estimate the relationship between rainfall and car accidents in a simple linear regression model in [Regression]. 
+<br>
+<br>
+We use functions from the `tidyverse` and `data.table` libraries. While we explain the goals of each step as we go, prior familiarity with these libraries is useful for replicating and modifying this code.
 <br>
 <br>
 <br>
+
 
 ## Setting Up
 
 <br>
-Using the R library `downloader`, we can download the gridMET data for precipitation in 2020 fairly easily. This can be looped over ([Appendix A]) with the help of a list of variables, years, and `paste0()`. Our polygons of interest will be counties, which will we access via the library [`tigris`](https://github.com/walkerke/tigris). Finally, we download the corresponding population data from LandScan. This data is available for those within the educational community, and for ease, we access a zipped version from Google Drive using the R library [`googledrive`](https://googledrive.tidyverse.org). 
+Using the R library `downloader`, we can download the gridMET data for precipitation in 2020. Multiple variables and years can be obtained by constructing a loop over ([Appendix A]) a list of variables and years, and paste0(). Our polygons of interest will be counties, which we access via the library [`tigris`](https://github.com/walkerke/tigris). Finally, we download the corresponding population data from [LandScan](https://landscan.ornl.gov). This data is available for those within the educational community, and we will read in from local storage. 
 <br>
 <br>
 ```{r eval = F}
@@ -65,7 +69,7 @@ googledrive::drive_download(paste0("Landscan/LandScan Global 2018.zip"),
 unzip("Landscan_2018.zip")
 ```
 <br>
-We continue to ingest the gridMET netCDF by applying the `brick()` function from the `raster` library to convert the netCDF to a raster. We only need the coordinates so we use `raster::xyFromCell()` on the first slice (day) in the brick, subsetted accordingly. Using `dplyr`, we create a tibble `slicecoords` that also also has a column `cell` with uniquely identifying cell numbers. 
+We continue to ingest the gridMET netCDF by applying the `brick()` function from the `raster` library to convert the netCDF to a raster (more detail on this can is found in the chapter `Read and Write Data from a NetCDF`). We only need the coordinates so we use `raster::xyFromCell()` on the first slice (day) in the brick, subsetting accordingly. Using `dplyr`, we create a tibble `slicecoords` that also has a column `cell` with uniquely identifying cell numbers. 
 <br>
 <br>
 ``` {r eval = F}
@@ -90,6 +94,7 @@ uslandscan <- crop(landscan,extent(counties))
 ```
 <br>
 <br>
+
 
 ## Weighting
 
@@ -219,22 +224,21 @@ By multiplying the population in a cell by the area weight from `extract`, we ca
 indx
 ```
 
-To calculate this for a single polygon, we use `data.table` functions within a `map2_dfr()`, looping over each polygon as it corresponds to the `extracted` list of dataframes and rows of `cbsa`. For each polygon in the loop, we merge with the netCDF `slicecoords` dataframe (see above). We then create the population weight by multiplying the population from the LandScan with the area of the polygon covered, and the total index by dividing the weighted population in that cell by the total weighted population in all cells found in the polygon. 
+To calculate this for a single polygon, we use `data.table` functions within a `map2_dfr()`, looping over each polygon as it corresponds to the `extracted` list of arrays (one for each polygon) and GEOID's of `counties` (also one for each polygon). We iterate over the arrays, making each array into a data table and then merging with the netCDFG coordinates found in the data frame `slicecoords` from the previous step; this assigns every lat/lon combination from the gridMET cells a polygon and a weight for that polygon. We then create the population weight by multiplying the population from the LandScan with the area of the polygon covered, and the total index by dividing the weighted population in that cell by the total weighted population in all cells found in the polygon. 
 <br>
 ```{r, eval = F}
 bridge <- map2_dfr(extracted,counties$GEOID,function(e1,GEOID){
   
-  e1dt <- e1 %>% 
+  e1dt <- e1 %>% # make array data table
       as.data.table()
   
-  if (nrow(e1dt) > 0){
+  if (nrow(e1dt) > 0){ # if statement to handle empty / error polygons
     
     temp <- e1dt %>% 
-      merge(., slicecoords, all.x=T, by="cell") %>%
-      # left_join(., slicecoords, by = "cell") %>% 
-      .[, c("popweight") :=
+      merge(., slicecoords, all.x=T, by="cell") %>% # merge with netCDF coordinates
+      .[, c("popweight") := # create population index
           .(value*weight)] %>% 
-      .[, c("totalindex","GEOID") :=
+      .[, c("totalindex","GEOID") := # create final population weight, and identify with GEOID
           .(popweight/sum(popweight),GEOID)] %>% 
       dplyr::select(GEOID,lon,lat,totalindex)
     
@@ -286,13 +290,16 @@ nc.df <- bind_cols(slicecoords,nc.data) %>%
 
 #####
 
-#--- prepare bridge ---#
+#--- prepare bridge with rounding---#
 bridge.ready <- bridge %>% 
   mutate(lon = round(lon,3),
          lat = round(lat,3))
 ```
 <br>
-With the netCDF data and the bridge ready, we can merge them and aggregate. We join the data to the bridge by the coordinates, and then move from a wide to a long dataframe. It was wide (columns were days), and we pivot it to long so that each row is a cell-day. Then, we create the value weighted of the weather in a gridMET cell as it contributes to the polygon weather, using the `total index` value from our bridge. This way, when we group by day and polygon to summarize, we sum our weighted values (`value`). For comparison, we also calculate the alternative, unweighted values. 
+Note that we round the bridge to accommodate minor differences in how the data is read in from the `raster` and `ncdf4` functions. The difference is slight, and rounding allows both sets of grids to be uniformly uniquely identified by latitude and longitude.
+<br>
+<br>
+With the netCDF data and the bridge ready, we can merge them and aggregate. We join the data to the bridge by the coordinates, and then reshape from a wide to a long dataframe. It was wide (columns were days), and we pivot it to long so that each row is a cell-day. Then, we create the weighted rainfall measure in a gridMET cell as it contributes to the polygon rainfall exposure, using the `total index` value from our bridge. This way, when we group by day and polygon to summarize, we sum our weighted rainfall (`value`). For comparison, we also calculate the alternative, unweighted values. 
 <br>
 <br>
 ```{r, eval=F}
