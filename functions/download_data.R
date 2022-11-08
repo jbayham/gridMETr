@@ -23,7 +23,7 @@ gridmetr_download <-
     #############################
     # Error handling:
     # Check variable
-    var_ref <- suppressMessages(read_csv("_ref/variables_reference.csv")) %>%
+    var_ref <- suppressMessages(read_csv("inputs/_ref/variables_reference.csv")) %>%
       mutate(variable=str_to_lower(variable))
     map(variables,function(v){
       if (!(v %in% var_ref$variable)) {
@@ -45,7 +45,7 @@ gridmetr_download <-
       mutate(file.name=str_c(var,"_",year,".nc")) 
     
     #Create destination folder(s) if they don't exist
-    map(str_c("data/",variables),
+    map(str_c("inputs/data/",variables),
         function(x){
           if(!dir.exists(x)){
             dir.create(x,recursive = T)}
@@ -55,7 +55,7 @@ gridmetr_download <-
     map(1:dim(file.list)[1],
                function(x){
                 #Check if the file exists in the target directory
-                target.file <- str_c("data/",file.list$var[x],"/",file.list$file.name[x])
+                target.file <- str_c("inputs/data/",file.list$var[x],"/",file.list$file.name[x])
                 if (file.exists(target.file)){
                   message("Target file exists")
                 } else {
