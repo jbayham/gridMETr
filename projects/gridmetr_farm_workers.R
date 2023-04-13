@@ -2,6 +2,7 @@
 #investigating the impact of pollution on farm worker productivity
 
 #Project setup
+setwd("~/git_projects/gridMETr")
 source("project_init.R")
 
 library(pacman)
@@ -13,10 +14,10 @@ conflict_prefer("year", "lubridate")
 #Download gridmet data
 
 #Define variables to use to construct data (see _ref/variables_reference.csv)
-g.vars <- c("pr","rmin","rmax","tmmn","tmmx","vs","erc","bi")
+g.vars <- c("pr","rmin","rmax","tmmn","tmmx","vs","th")
 
 #Define years to construct data
-g.years <- seq.int(2018,2021)
+g.years <- seq.int(2010,2015)
 #########################################################################
 #Get netcdf data from source and cache copies in data folder 
 gridmetr_download(variables = g.vars,
@@ -29,7 +30,7 @@ farms <- st_read("cache/farms.geojson") %>%
   st_transform(4326)
 
 #Open the connection to the netCDF file
-nc <- nc_open("data/tmmx/tmmx_2010.nc")
+nc <- nc_open("inputs/data/tmmx/tmmx_2010.nc")
 
 
 #Extract lat and lon vectors
@@ -44,7 +45,7 @@ nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat) %>%
 readin.proj=4326 #because it works with the lat and lons provided
 
 #Alt method reading as raster then using exact_extract
-tmmx <- raster("data/tmmx/tmmx_2010.nc")
+tmmx <- raster("inputs/data/tmmx/tmmx_2010.nc")
 crs(tmmx)<-CRS("+init=epsg:4326")
 #mapview::mapview(tmmx)
 
@@ -69,7 +70,7 @@ file.list <- expand.grid(g.vars,g.years,stringsAsFactors = F) %>%
          file.name = str_c(var,"_",year,".nc")) %>% 
   arrange(var) 
 
-allheat <- paste0("data/",file.list$var,"/",file.list$file.name)
+allheat <- paste0("inputs/data/",file.list$var,"/",file.list$file.name)
 heat1 <- allheat[1]
 
 plan(multisession(workers = 15))
@@ -107,9 +108,9 @@ future_map(allheat,
                     variable.name = "date",
                     value.name = "value") 
              
-             dir_name = str_c("cache/",str_split(heat1,"/")[[1]][[2]])
+             dir_name = str_c("cache/",str_split(heat1,"/")[[1]][3])
              if(!dir.exists(dir_name)) dir.create(dir_name)
-             write_rds(var.block,paste0(dir_name,"/",str_split(heat1,"/")[[1]][[2]],"_",str_sub(heat1,-7,-4),".rds"))
+             write_rds(var.block,paste0(dir_name,"/",str_split(heat1,"/")[[1]][3],"_",str_sub(heat1,-7,-4),".rds"))
              
            },.progress = T)
 
