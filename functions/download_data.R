@@ -74,4 +74,9 @@ gridmetr_download <-
 }
   
 
-
+gridmetr_download_pdsi <- function(){
+  if(!dir.exists("inputs/data/pdsi")) dir.create("inputs/data/pdsi",recursive = T)
+  download(url="http://www.northwestknowledge.net/metdata/data/pdsi.nc",
+           destfile = "inputs/data/pdsi/pdsi.nc",
+           mode = 'wb')
+}

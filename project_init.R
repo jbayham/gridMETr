@@ -31,7 +31,7 @@ conflict_prefer("between", "dplyr")
 run.script("functions")
 
 #load geographies
-load("_ref/geographies/geos.Rdata")
+load("inputs/_ref/geographies/geos.Rdata")
 ##########################################
 ##########################################
 #Function to download the project data (on first run, google should prompt you to login with credentials)
