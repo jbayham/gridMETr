@@ -7,81 +7,80 @@
 #User-defined variables (use vector of string names or "." for wildcard):
 
 #Define folders (variables) to extract - 
-folder.names <- c("pr","rmin","rmax","srad","tmmx","tmmn","vs","th","pet","fm100","fm1000")
+folder.names <- c("pdsi")
 #Define set of years 
-filter.years <- seq.int(1980,2022,1)
+#filter.years <- seq.int(1980,2022,1)
 ##################################
-gridmetr_download(variables = folder.names,
-                  years = filter.years)
+# gridmetr_download(variables = folder.names,
+#                   years = filter.years)
 
 #gridmetr_download_pdsi()
 ##################################
 
 
 #All gridmet files are on the same grid of lat and lons so grabbing one
-file.names <- list.files("inputs/data",recursive = T,pattern = ".nc",full.names = T)
-
-#Open the connection to the netCDF file
-nc <- nc_open(file.names[1])
+file.names <- list.files("inputs/data/pdsi",recursive = T,pattern = ".nc",full.names = T)
 
 
-#Extract lat and lon vectors
-nc_lat <- ncvar_get(nc = nc, varid = "lat")
-nc_lon <- ncvar_get(nc = nc, varid = "lon")
+if(!file.exists("cache/bridge_county.rds")){
+  #Open the connection to the netCDF file
+  nc <- nc_open(file.names[1])
+  
+  
+  #Extract lat and lon vectors
+  nc_lat <- ncvar_get(nc = nc, varid = "lat")
+  nc_lon <- ncvar_get(nc = nc, varid = "lon")
+  
+  #Use the lat and lon vectors to create a grid represented as two vectors (note:
+  #lon must go first to match with netcdf data)
+  nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat) %>% 
+    mutate(lon = round(lon,5),
+           lat = round(lat,5),
+           cells=row_number())
+  
+  
+  ##############################################
+  #Use GIS tools to aggregate data by chosen geography
+  ##############################################
+  #Choose a projection to be used by all geographic files
+  readin.proj=4326 #because it works with the lat and lons provided
+  
+  #Converting nc coordinates from vector form to simple feature (sf)
+  g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>% 
+    st_set_crs(readin.proj)
+  
+  #ensure that county polygons are also in 4326
+  us_co <- st_transform(us_co,4326)
+  
+  #Attaching geographic data to netcdf grid -- ignore warning
+  bridge.county <- st_join(g.nc.coords,us_co,left=T) %>%
+    dplyr::select(county=geoid,cells) %>%
+    sfc_as_cols(.,names = c("lon","lat")) %>%
+    st_set_geometry(NULL)
+  
+  saveRDS(bridge.county,"cache/bridge_county.rds")
+} else {
+  bridge.county <- readRDS("cache/bridge_county.rds")
+}
 
-#Use the lat and lon vectors to create a grid represented as two vectors (note:
-#lon must go first to match with netcdf data)
-nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat) %>% 
-  mutate(lon = round(lon,5),
-         lat = round(lat,5),
-         cells=row_number())
-
-
-##############################################
-#Use GIS tools to aggregate data by chosen geography
-##############################################
-#Choose a projection to be used by all geographic files
-readin.proj=4326 #because it works with the lat and lons provided
-
-#Converting nc coordinates from vector form to simple feature (sf)
-g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>% 
-  st_set_crs(readin.proj)
-
-#ensure that county polygons are also in 4326
-us_co <- st_transform(us_co,4326)
-
-#Attaching geographic data to netcdf grid -- ignore warning
-bridge.county <- st_join(g.nc.coords,us_co,left=T) %>%
-  dplyr::select(county=geoid,cells) %>%
-  sfc_as_cols(.,names = c("lon","lat")) %>%
-  st_set_geometry(NULL)
 
 
 #######################
 
-file.list <- expand.grid(folder.names,filter.years,stringsAsFactors = F) %>% 
-  rename(var=Var1,year=Var2) %>%
-  mutate(var=str_to_lower(var),
-         file.name = str_c(var,"_",year,".nc")) %>% 
-  arrange(var) 
-
-file.list <- paste0("inputs/data/",file.list$var,"/",file.list$file.name)
-
-
-fy = file.list[1]
+fy = file.names
 
 #Begin loop over variables (folders)
-plan(multisession(workers = 15))
-future_walk(
-  file.list,
-  function(fy){
-    message(str_c("Beginning ",fy,"..."))
+#plan(multisession(workers = 15))
+# future_walk(
+#   file.list,
+#   function(fy){
+#     message(str_c("Beginning ",fy,"..."))
     
     vname=str_split(fy,"/")[[1]][3]
     
     #Construct the dataframe with all days and cells
     nc <- nc_open(fy)
-    var.id=names(nc$var)
+    var.id=names(nc$var)[1]
     date.vector <- as_date(nc$dim$day$vals,origin="1900-01-01")
     
     nc.data <- ncvar_get(nc = nc, varid = var.id)[,,]
@@ -115,9 +114,9 @@ future_walk(
     
     dir_name = str_c("cache/",vname)
     if(!dir.exists(dir_name)) dir.create(dir_name)
-    write_parquet(out,paste0(dir_name,"/",vname,"_",str_sub(fy,-7,-4),".parquet"))
+    write_parquet(out,paste0(dir_name,"/",vname,".parquet"))
     
-  },.progress = T)
+  # },.progress = T)
     
 
  

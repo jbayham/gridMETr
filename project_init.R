@@ -18,6 +18,7 @@ init.pacs(c("tidyverse",      #shortcut to many useful packages (eg, dplyr, ggpl
             "raster",         #for working with raster data
             "rgdal",          #GIS processing
             "ncdf4",          #accessing netcdf data
+            "arrow",
             "haven"           #other stat datatypes
 ))
 

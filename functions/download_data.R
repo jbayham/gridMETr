@@ -17,9 +17,12 @@ gridmetr_download <-
     require(stringr)
     require(readr)
     require(purrr)
+    require(conflicted)
     #require(furrr)
     #require(future)
     require(downloader)
+    
+    conflict_prefer("year", "lubridate")
     #############################
     # Error handling:
     # Check variable
@@ -75,8 +78,11 @@ gridmetr_download <-
   
 
 gridmetr_download_pdsi <- function(){
+  require(downloader)
   if(!dir.exists("inputs/data/pdsi")) dir.create("inputs/data/pdsi",recursive = T)
+  if(!file.exists("inputs/data/pdsi/pdsi.nc")){
   download(url="http://www.northwestknowledge.net/metdata/data/pdsi.nc",
            destfile = "inputs/data/pdsi/pdsi.nc",
            mode = 'wb')
+  }
 }
