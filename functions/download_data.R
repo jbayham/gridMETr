@@ -11,6 +11,19 @@ gridmetr_download <-
     #   No objects but it does create a data folder and saves netcdf files in it
     #
     
+    var_ref <- structure(list(variable = c("sph", "vpd", "pr", "rmin", "rmax", 
+                                           "srad", "tmmn", "tmmx", "vs", "th", "pdsi", "pet", "etr", "erc", 
+                                           "bi", "fm100", "fm1000"), description = c("Near-Surface Specific Humidity", 
+                                                                                     "Mean Vapor Pressure Deficit", "Precipitation", "Minimum Near-Surface Relative Humidity", 
+                                                                                     "Maximum Near-Surface Relative Humidity", "Surface Downwelling Solar Radiation", 
+                                                                                     "Minimum Near-Surface Air Temperature", "Maximum Near-Surface Air Temperature", 
+                                                                                     "Wind speed at 10 m", "Wind direction at 10 m", "Palmer Drought Severity Index", 
+                                                                                     "Reference grass evaportranspiration", "Reference alfalfa evaportranspiration", 
+                                                                                     "Energy Release Component (model-G)", "Burning Index (model-G)", 
+                                                                                     "100-hour dead fuel moisture", "1000-hour dead fuel moisture"
+                                           )), row.names = c(NA, -17L), class = "data.frame")
+    
+    
     #libraries
     require(dplyr)
     require(lubridate)
@@ -26,8 +39,7 @@ gridmetr_download <-
     #############################
     # Error handling:
     # Check variable
-    var_ref <- suppressMessages(read_csv("inputs/_ref/variables_reference.csv")) %>%
-      mutate(variable=str_to_lower(variable))
+    
     map(variables,function(v){
       if (!(v %in% var_ref$variable)) {
         stop(str_c("Variable ",v," not valid gridMET variable"))
