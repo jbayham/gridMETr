@@ -31,8 +31,7 @@ conflict_prefer("between", "dplyr")
 #Loading project helper functions (all scripts within folder)
 run.script("functions")
 
-#load geographies
-load("inputs/_ref/geographies/geos.Rdata")
+
 ##########################################
 ##########################################
 #Function to download the project data (on first run, google should prompt you to login with credentials)
@@ -43,3 +42,6 @@ if(!dir.exists("inputs"))  system("ln -s /RSTOR/shared_data/gridmet inputs")  #l
 
 
 #folder.setup()
+
+#load geographies
+load("inputs/_ref/geographies/geos.Rdata")

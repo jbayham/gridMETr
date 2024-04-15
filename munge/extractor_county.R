@@ -7,15 +7,18 @@
 #User-defined variables (use vector of string names or "." for wildcard):
 
 #Define folders (variables) to extract - 
-folder.names <- c(".")
+folder.names <- c("tmmx","pr","rmax")
 #Define set of years 
-filter.years <- c(".")
+filter.years <- c("2023")
 ##################################
 ##################################
-
+gridmetr_download(folder.names,filter.years)
 
 #All gridmet files are on the same grid of lat and lons so grabbing one
-file.names <- list.files("data",recursive = T,pattern = ".nc",full.names = T)
+file.names <- list.files("inputs/data",recursive = T,pattern = ".nc",full.names = T) %>%
+  str_subset(pattern = paste0(folder.names,collapse = "|")) %>%
+  str_subset(pattern = paste0(filter.years,collapse = "|"))
+
 
 #Open the connection to the netCDF file
 nc <- nc_open(file.names[1])
@@ -37,8 +40,7 @@ nc.coords <- expand.grid(lon=nc_lon,lat=nc_lat)
 readin.proj=4269 #because it works with the lat and lons provided
 
 #Converting nc coordinates from vector form to simple feature (sf)
-g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat")) %>% 
-  st_set_crs(readin.proj)
+g.nc.coords <- st_as_sf(nc.coords, coords = c("lon","lat"),crs=readin.proj) 
 
 
 #Attaching geographic data to netcdf grid -- ignore warning
@@ -61,12 +63,12 @@ pb <- progress_bar$new(
   total = length(file.names), clear = FALSE, width= 60)
 #Begin loop over variables (folders)
 gridmet.county <- 
-  map_dfr(str_subset(dir("data"),pattern=str_c(folder.names,collapse = "|")),
+  map_dfr(str_subset(dir("inputs/data"),pattern=str_c(folder.names,collapse = "|")),
       function(fn){
         message(str_c("Beginning ",fn,"..."))
         
         #Finding the names of all files in the directory
-        file.names <- dir(str_c("data/",fn)) %>%
+        file.names <- dir(str_c("inputs/data/",fn)) %>%
           str_subset(pattern=str_c(filter.years,collapse = "|"))
         
         #Setting static local folder name (probably unecessary)
@@ -74,7 +76,7 @@ gridmet.county <-
         
         #Extracting variable name for organization below
         #Open the connection to the netCDF file
-        nc <- nc_open(str_c("data/",fn,"/",file.names[1]))
+        nc <- nc_open(str_c("inputs/data/",fn,"/",file.names[1]))
         var.id=names(nc$var)
 
         #Begin loop over years (files)
@@ -83,7 +85,7 @@ gridmet.county <-
             function(f.names){
               pb$tick()
               #Open the connection to the netCDF file
-              nc <- nc_open(str_c("data/",fn,"/",f.names))
+              nc <- nc_open(str_c("inputs/data/",fn,"/",f.names))
               
               #Get dates
               date.vector <- as_date(nc$dim$day$vals,origin="1900-01-01")
@@ -116,9 +118,21 @@ gridmet.county <-
     }) %>%
   dplyr::filter(!is.na(value))
 
-yr.range <- unique(year(gridmet.county$date))
 
-save(gridmet.county,file = str_c("output/gridmet_county_daily_",min(yr.range),"-",max(yr.range),".Rdata"))
+county_final <- gridmet.county %>%
+  mutate(value=ifelse(str_detect(variable,"vs"),   #Windspeed m/s to mph
+                      measurements::conv_unit(value,"m_per_sec","mph"),
+                      value),
+         value=ifelse(str_detect(variable,"pr"),   #precip mm to inch
+                      measurements::conv_unit(value,"mm","inch"),
+                      value),
+         value=ifelse(str_detect(variable,"tmm"),             #Temp Kelvin to F
+                      measurements::conv_unit(value,"K","F"),
+                      value))
+
+yr.range <- unique(year(county_final$date))
+
+write_csv(county_final,file = str_c("output/gridmet_county_daily_",min(yr.range),"-",max(yr.range),".csv.gz"))
 
 
 # for.dale <- gridmet.county %>%
